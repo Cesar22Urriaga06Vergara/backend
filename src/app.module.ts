@@ -5,6 +5,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
+import { AmenidadModule } from './amenidad/amenidad.module';
+import { TipoHabitacionModule } from './tipo-habitacion/tipo-habitacion.module';
+import { HabitacionModule } from './habitacion/habitacion.module';
 
 @Module({
   imports: [
@@ -37,6 +40,9 @@ import { AuthModule } from './auth/auth.module';
     AuthModule,
 
     // Módulos de la aplicación
+    AmenidadModule,
+    TipoHabitacionModule,
+    HabitacionModule,
 
   ],
   controllers: [AppController],
