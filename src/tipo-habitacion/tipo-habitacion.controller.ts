@@ -25,9 +25,7 @@ import { UpdateTipoHabitacionDto } from './dto/update-tipo-habitacion.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('Tipos de Habitación')
-@ApiBearerAuth()
 @Controller('tipos-habitacion')
-@UseGuards(JwtAuthGuard)
 export class TipoHabitacionController {
   constructor(private readonly tipoHabitacionService: TipoHabitacionService) {}
 
@@ -36,6 +34,8 @@ export class TipoHabitacionController {
    * Crear un nuevo tipo de habitación
    */
   @Post()
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear un nuevo tipo de habitación' })
   @ApiBody({ type: CreateTipoHabitacionDto })
   @ApiResponse({ status: 201, description: 'Tipo de habitación creado exitosamente' })
@@ -47,13 +47,12 @@ export class TipoHabitacionController {
 
   /**
    * GET /tipos-habitacion
-   * Obtener todos los tipos de habitación
+   * Obtener todos los tipos de habitación (PÚBLICO)
    */
   @Get()
   @ApiOperation({ summary: 'Obtener todos los tipos de habitación' })
   @ApiQuery({ name: 'idHotel', required: false, type: Number, description: 'Filtrar por ID del hotel' })
   @ApiResponse({ status: 200, description: 'Tipos de habitación obtenidos exitosamente' })
-  @ApiResponse({ status: 401, description: 'No autorizado' })
   findAll(@Query('idHotel') idHotel?: string) {
     if (idHotel) {
       return this.tipoHabitacionService.findByHotel(parseInt(idHotel));
@@ -63,7 +62,7 @@ export class TipoHabitacionController {
 
   /**
    * GET /tipos-habitacion/:id
-   * Obtener un tipo de habitación por ID
+   * Obtener un tipo de habitación por ID (PÚBLICO)
    */
   @Get(':id')
   @ApiOperation({ summary: 'Obtener un tipo de habitación por ID' })
@@ -80,6 +79,8 @@ export class TipoHabitacionController {
    * Actualizar un tipo de habitación
    */
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar un tipo de habitación' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del tipo de habitación' })
   @ApiBody({ type: UpdateTipoHabitacionDto })
@@ -99,6 +100,8 @@ export class TipoHabitacionController {
    * Eliminar un tipo de habitación
    */
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Eliminar un tipo de habitación' })
   @ApiParam({ name: 'id', type: Number, description: 'ID del tipo de habitación' })
   @ApiResponse({ status: 200, description: 'Tipo de habitación eliminado exitosamente' })

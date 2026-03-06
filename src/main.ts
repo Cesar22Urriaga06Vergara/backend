@@ -15,8 +15,13 @@ async function bootstrap() {
     }),
   );
 
-  // Habilitar CORS (opcional, para desarrollo con frontend)
-  app.enableCors();
+  // Habilitar CORS para desarrollo con frontend
+  app.enableCors({
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3003'],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  });
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Hotel Sena API')

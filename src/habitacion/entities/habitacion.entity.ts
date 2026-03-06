@@ -32,6 +32,9 @@ export class Habitacion {
   @Column({ name: 'fecha_actualizacion', nullable: true })
   fechaActualizacion: Date;
 
+  @Column({ type: 'text', nullable: true })
+  imagenes?: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

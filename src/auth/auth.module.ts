@@ -5,12 +5,14 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { UserModule } from '../user/user.module';
+import { ClienteModule } from '../cliente/cliente.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
     // Importar UserModule para acceder a UserService
     UserModule,
+    ClienteModule,
     
     // Configurar Passport
     PassportModule,

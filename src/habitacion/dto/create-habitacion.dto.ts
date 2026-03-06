@@ -43,4 +43,13 @@ export class CreateHabitacionDto {
   @IsNumber()
   @IsNotEmpty()
   idTipoHabitacion: number;
+
+  @ApiPropertyOptional({
+    description: 'URLs de las imágenes subidas a Cloudinary',
+    example: 'https://res.cloudinary.com/.../img1.jpg,https://res.cloudinary.com/.../img2.jpg',
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  imagenes?: string;
 }

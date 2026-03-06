@@ -8,6 +8,9 @@ import { AuthModule } from './auth/auth.module';
 import { AmenidadModule } from './amenidad/amenidad.module';
 import { TipoHabitacionModule } from './tipo-habitacion/tipo-habitacion.module';
 import { HabitacionModule } from './habitacion/habitacion.module';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
+import { ReservaModule } from './reserva/reserva.module';
+import { ClienteModule } from './cliente/cliente.module';
 
 @Module({
   imports: [
@@ -30,7 +33,7 @@ import { HabitacionModule } from './habitacion/habitacion.module';
         password: configService.get('DB_PASSWORD'),
         database: configService.get('DB_DATABASE'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: false,
+        synchronize: true,
       }),
       inject: [ConfigService],
     }),
@@ -39,10 +42,15 @@ import { HabitacionModule } from './habitacion/habitacion.module';
 
     AuthModule,
 
+    // Módulo de Cloudinary
+    CloudinaryModule,
+
     // Módulos de la aplicación
     AmenidadModule,
     TipoHabitacionModule,
     HabitacionModule,
+    ReservaModule,
+    ClienteModule,
 
   ],
   controllers: [AppController],

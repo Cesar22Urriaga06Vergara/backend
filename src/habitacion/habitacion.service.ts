@@ -1,18 +1,22 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Habitacion } from './entities/habitacion.entity';
 import { CreateHabitacionDto } from './dto/create-habitacion.dto';
 import { UpdateHabitacionDto } from './dto/update-habitacion.dto';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @Injectable()
 export class HabitacionService {
   constructor(
     @InjectRepository(Habitacion)
     private habitacionRepository: Repository<Habitacion>,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
-  async create(createHabitacionDto: CreateHabitacionDto): Promise<Habitacion> {
+  async create(
+    createHabitacionDto: CreateHabitacionDto,
+  ): Promise<Habitacion> {
     const habitacion = this.habitacionRepository.create({
       ...createHabitacionDto,
       estado: createHabitacionDto.estado || 'disponible',
@@ -27,9 +31,13 @@ export class HabitacionService {
     });
   }
 
-  async findByHotel(idHotel: number): Promise<Habitacion[]> {
+  async findByHotel(idHotel: number, soloDisponibles: boolean = false): Promise<Habitacion[]> {
+    const whereCondition: any = { idHotel };
+    if (soloDisponibles) {
+      whereCondition.estado = 'disponible';
+    }
     return await this.habitacionRepository.find({
-      where: { idHotel },
+      where: whereCondition,
       relations: ['tipoHabitacion', 'tipoHabitacion.amenidades'],
       order: { numeroHabitacion: 'ASC' },
     });
@@ -66,5 +74,40 @@ export class HabitacionService {
   async remove(id: number): Promise<void> {
     const habitacion = await this.findOne(id);
     await this.habitacionRepository.remove(habitacion);
+  }
+
+  /**
+   * Subir o actualizar imágenes de una habitación existente
+   */
+  async uploadImages(
+    id: number,
+    files: Express.Multer.File[],
+  ): Promise<Habitacion> {
+    // Verificar que la habitación existe
+    const habitacion = await this.findOne(id);
+
+    if (!files || files.length === 0) {
+      throw new BadRequestException('Debes proporcionar al menos una imagen');
+    }
+
+    try {
+      // Subir imágenes a Cloudinary
+      const imageUrls = await this.cloudinaryService.uploadMultipleImages(
+        files,
+      );
+
+      // Si ya hay imágenes, agregarlas (si no, solo guardar las nuevas)
+      const existingImages = habitacion.imagenes ? habitacion.imagenes.split(',') : [];
+      const allImages = [...existingImages, ...imageUrls];
+      
+      // Actualizar habitación con las URLs
+      habitacion.imagenes = allImages.join(',');
+      habitacion.fechaActualizacion = new Date();
+      return await this.habitacionRepository.save(habitacion);
+    } catch (error) {
+      throw new BadRequestException(
+        `Error al subir imágenes: ${error.message}`,
+      );
+    }
   }
 }

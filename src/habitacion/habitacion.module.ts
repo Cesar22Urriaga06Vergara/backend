@@ -4,11 +4,13 @@ import { HabitacionService } from './habitacion.service';
 import { HabitacionController } from './habitacion.controller';
 import { Habitacion } from './entities/habitacion.entity';
 import { TipoHabitacionModule } from '../tipo-habitacion/tipo-habitacion.module';
+import { CloudinaryModule } from '../cloudinary/cloudinary.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Habitacion]),
     TipoHabitacionModule,
+    CloudinaryModule,
   ],
   controllers: [HabitacionController],
   providers: [HabitacionService],

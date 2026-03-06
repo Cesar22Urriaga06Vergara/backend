@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UserService } from '../user/user.service';
+import { ClienteService } from '../cliente/cliente.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
@@ -10,6 +11,7 @@ import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
 export class AuthService {
   constructor(
     private readonly userService: UserService,
+    private readonly clienteService: ClienteService,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -19,7 +21,22 @@ export class AuthService {
    */
   async register(registerDto: RegisterDto) {
     // Crear el usuario usando el servicio de usuarios
-    const user = await this.userService.create(registerDto);
+    let user = await this.userService.create(registerDto);
+
+    // Si es cliente, crear automáticamente un registro en la tabla de clientes
+    if (user.role === 'cliente') {
+      const cliente = await this.clienteService.create({
+        idUsuario: user.id,
+        cedula: `TEMP_${user.id}`, // Temporal, puede ser actualizado luego
+        nombre: user.fullName || 'Cliente',
+        apellido: '',
+        email: user.email,
+      });
+
+      // Actualizar el usuario con el idCliente
+      user.idCliente = cliente.id;
+      user = await this.userService.update(user.id, { idCliente: cliente.id } as any);
+    }
 
     // Generar el token JWT y refreshToken
     const token = await this.generateToken(user.id, user.email, user.role);
@@ -48,7 +65,7 @@ export class AuthService {
     const { email, password } = loginDto;
 
     // Buscar usuario por email (incluye password)
-    const user = await this.userService.findOneByEmail(email);
+    let user = await this.userService.findOneByEmail(email);
 
     // Verificar si el usuario existe
     if (!user) {
@@ -65,6 +82,20 @@ export class AuthService {
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Credenciales inválidas');
+    }
+
+    // Si es cliente pero no tiene idCliente, crear uno automáticamente
+    if (user.role === 'cliente' && !user.idCliente) {
+      const cliente = await this.clienteService.create({
+        idUsuario: user.id,
+        cedula: `TEMP_${user.id}`,
+        nombre: user.fullName || 'Cliente',
+        apellido: '',
+        email: user.email,
+      });
+
+      user.idCliente = cliente.id;
+      user = await this.userService.update(user.id, { idCliente: cliente.id } as any);
     }
 
     // Generar el token JWT y refreshToken
