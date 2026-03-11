@@ -396,6 +396,48 @@ export class ReservaController {
   }
 
   /**
+   * POST /reservas/:id/confirmar
+   * Confirmar reserva (recepcionista confirma que es válida)
+   * Cambia estado de 'reservada' a 'confirmada'
+   * - Solo Recepcionista/Admin/Superadmin
+   */
+  @Post(':id/confirmar')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('recepcionista', 'admin', 'superadmin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Confirmar reserva (cambiar estado a confirmada)' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 200, description: 'Reserva confirmada exitosamente' })
+  @ApiResponse({ status: 404, description: 'Reserva no encontrada' })
+  @ApiResponse({ status: 400, description: 'Reserva no está en estado reservada' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({ status: 403, description: 'Acceso denegado' })
+  async confirmarReserva(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req,
+  ): Promise<Reserva> {
+    const reserva = await this.reservaService.findOne(id);
+    if (!reserva) {
+      throw new NotFoundException(`Reserva ${id} no encontrada`);
+    }
+
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+
+    // Validar que sea del hotel
+    if (
+      (userRole === 'recepcionista' || userRole === 'admin') &&
+      reserva.idHotel !== userIdHotel
+    ) {
+      throw new ForbiddenException(
+        'No tienes acceso a reservas de otros hoteles',
+      );
+    }
+
+    return await this.reservaService.confirmarReserva(id);
+  }
+
+  /**
    * POST /reservas/:id/checkin
    * Confirmar check-in (PROTEGIDA)
    * - Solo Recepcionista/Admin/Superadmin
@@ -473,53 +515,6 @@ export class ReservaController {
     }
 
     return await this.reservaService.confirmarCheckout(id);
-  }
-
-  /**
-   * POST /reservas/:id/confirmar
-   * Confirmar una reserva (Recepcionista verifica cédula e ingresa cliente)
-   * Cambia estado de 'reservada' a 'confirmada'
-   * - Solo Recepcionista/Admin/Superadmin
-   */
-  @Post(':id/confirmar')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'admin', 'superadmin')
-  @ApiBearerAuth()
-  @ApiOperation({ 
-    summary: 'Confirmar reserva (Check-in)',
-    description: 'Recepcionista verifica la cédula del cliente y confirma la entrada al hotel. Cambia de "reservada" a "confirmada"'
-  })
-  @ApiParam({ name: 'id', type: Number })
-  @ApiBody({ schema: { type: 'object', properties: { cedula: { type: 'string', example: '1003001750' } } } })
-  @ApiResponse({ status: 200, description: 'Reserva confirmada exitosamente' })
-  @ApiResponse({ status: 400, description: 'Estado inválido o cédula no coincide' })
-  @ApiResponse({ status: 404, description: 'Reserva no encontrada' })
-  @ApiResponse({ status: 401, description: 'No autorizado' })
-  @ApiResponse({ status: 403, description: 'Acceso denegado' })
-  async confirmarReserva(
-    @Param('id', ParseIntPipe) id: number,
-    @Body('cedula') cedula: string,
-    @Request() req,
-  ): Promise<Reserva> {
-    const reserva = await this.reservaService.findOne(id);
-    if (!reserva) {
-      throw new NotFoundException(`Reserva ${id} no encontrada`);
-    }
-
-    const userRole = req.user.rol;
-    const userIdHotel = req.user.idHotel;
-
-    // Validar que sea del hotel
-    if (
-      (userRole === 'recepcionista' || userRole === 'admin') &&
-      reserva.idHotel !== userIdHotel
-    ) {
-      throw new ForbiddenException(
-        'No tienes acceso a reservas de otros hoteles',
-      );
-    }
-
-    return await this.reservaService.confirmarReserva(id, cedula);
   }
 
   /**

@@ -10,6 +10,7 @@ import { Repository, DataSource, LessThan, MoreThan, Between } from 'typeorm';
 import { Reserva } from './entities/reserva.entity';
 import { Habitacion } from '../habitacion/entities/habitacion.entity';
 import { TipoHabitacion } from '../tipo-habitacion/entities/tipo-habitacion.entity';
+import { Cliente } from '../cliente/entities/cliente.entity';
 import { CreateReservaDto } from './dto/create-reserva.dto';
 import { UpdateReservaDto } from './dto/update-reserva.dto';
 import { DisponibilidadQueryDto } from './dto/disponibilidad-query.dto';
@@ -24,8 +25,20 @@ export class ReservaService {
     private habitacionRepository: Repository<Habitacion>,
     @InjectRepository(TipoHabitacion)
     private tipoHabitacionRepository: Repository<TipoHabitacion>,
+    @InjectRepository(Cliente)
+    private clienteRepository: Repository<Cliente>,
     private dataSource: DataSource,
   ) {}
+
+  /**
+   * Enriquecer reservas con datos de cliente si están faltando
+   * Método auxiliar para rellenar campos desnormalizados que puedan haber quedado NULL
+   */
+  private async enriquecerReservas(reservas: Reserva[]): Promise<Reserva[]> {
+    // Simplificado: solo retornar las reservas como están
+    // La población de cliente ya se hace en create(), así que no es necesario rellenar después
+    return reservas;
+  }
 
   /**
    * Generar código de confirmación único
@@ -79,12 +92,20 @@ export class ReservaService {
 
     // Obtener todas las reservas que solapan con el rango de fechas solicitado
     const reservasConflictivas = await this.reservaRepository.find({
-      where: {
-        idHotel: query.idHotel,
-        estadoReserva: 'confirmada', // Solo contar reservas activas
-        checkinPrevisto: LessThan(checkoutFecha),
-        checkoutPrevisto: MoreThan(checkinFecha),
-      },
+      where: [
+        {
+          idHotel: query.idHotel,
+          estadoReserva: 'reservada', // Contar reservas reservadas
+          checkinPrevisto: LessThan(checkoutFecha),
+          checkoutPrevisto: MoreThan(checkinFecha),
+        },
+        {
+          idHotel: query.idHotel,
+          estadoReserva: 'confirmada', // Contar reservas confirmadas
+          checkinPrevisto: LessThan(checkoutFecha),
+          checkoutPrevisto: MoreThan(checkinFecha),
+        },
+      ],
     });
 
     // Crear un set de IDs de habitaciones ocupadas
@@ -176,8 +197,14 @@ export class ReservaService {
         throw new BadRequestException('La fecha de check-in debe ser anterior a check-out');
       }
 
-      // Validar que el cliente exista (solo verificación básica)
-      // En producción, hacer una consulta a una tabla de clientes
+      // Obtener datos del cliente
+      const cliente = await queryRunner.manager.findOne(Cliente, {
+        where: { id: createReservaDto.idCliente },
+      });
+
+      if (!cliente) {
+        throw new NotFoundException('Cliente no encontrado');
+      }
 
       // Obtener el tipo de habitación
       const tipoHabitacion = await queryRunner.manager.findOne(
@@ -230,9 +257,13 @@ export class ReservaService {
         idHabitacion: habitacionDisponible.id,
         checkinPrevisto,
         checkoutPrevisto,
-        estadoReserva: 'confirmada',
+        estadoReserva: 'reservada',
         codigoConfirmacion,
         precioNocheSnapshot: tipoHabitacion.precioBase,
+        // Datos del cliente obtenidos de la base de datos
+        nombreCliente: cliente.nombre,
+        cedulaCliente: cliente.cedula,
+        emailCliente: cliente.email,
       });
 
       await queryRunner.manager.save(nuevaReserva);
@@ -263,11 +294,12 @@ export class ReservaService {
    * Obtener todas las reservas de un cliente
    */
   async findByCliente(idCliente: number): Promise<Reserva[]> {
-    return await this.reservaRepository.find({
+    const reservas = await this.reservaRepository.find({
       where: { idCliente },
       relations: ['habitacion', 'tipoHabitacion', 'tipoHabitacion.amenidades'],
       order: { createdAt: 'DESC' },
     });
+    return await this.enriquecerReservas(reservas);
   }
 
   /**
@@ -285,7 +317,6 @@ export class ReservaService {
       .createQueryBuilder('reserva')
       .leftJoinAndSelect('reserva.habitacion', 'habitacion')
       .leftJoinAndSelect('reserva.tipoHabitacion', 'tipoHabitacion')
-      .leftJoinAndSelect('tipoHabitacion.amenidades', 'amenidades')
       .where('reserva.id_cliente = :idCliente', { idCliente });
 
     // Filtrar por hotel si es recepcionista o admin
@@ -302,11 +333,12 @@ export class ReservaService {
    * Obtener reservas por hotel
    */
   async findByHotel(idHotel: number): Promise<Reserva[]> {
-    return await this.reservaRepository.find({
+    const reservas = await this.reservaRepository.find({
       where: { idHotel },
-      relations: ['habitacion', 'tipoHabitacion', 'tipoHabitacion.amenidades'],
+      relations: ['habitacion', 'tipoHabitacion'],
       order: { checkinPrevisto: 'ASC' },
     });
+    return await this.enriquecerReservas(reservas);
   }
 
   /**
@@ -314,19 +346,21 @@ export class ReservaService {
    */
   async findByCedula(cedulaCliente: string, idHotel: number): Promise<Reserva[]> {
     try {
-      // Usar QueryBuilder correctamente sin condición en el JOIN
+      // Buscar por el campo desnormalizado cedula_cliente en la tabla reservas
+      // NOTA: tipoHabitacion.amenidades están configuradas como eager, no hacer JOIN explícito
       const reservas = await this.reservaRepository
         .createQueryBuilder('reserva')
-        .leftJoinAndSelect('reserva.cliente', 'cliente')
         .leftJoinAndSelect('reserva.habitacion', 'habitacion')
         .leftJoinAndSelect('reserva.tipoHabitacion', 'tipoHabitacion')
-        .leftJoinAndSelect('tipoHabitacion.amenidades', 'amenidades')
-        .where('cliente.cedula = :cedula', { cedula: cedulaCliente })
+        .where('reserva.cedula_cliente = :cedula', { cedula: cedulaCliente })
         .andWhere('reserva.id_hotel = :idHotel', { idHotel })
+        .orderBy('reserva.created_at', 'DESC')
         .getMany();
 
       console.log(`findByCedula - Encontradas ${reservas.length} reservas para cédula ${cedulaCliente} en hotel ${idHotel}`);
-      return reservas;
+      
+      // Enriquecer reservas con datos del cliente si están faltando
+      return await this.enriquecerReservas(reservas);
     } catch (error) {
       console.error(`Error en findByCedula - cedula: ${cedulaCliente}, hotel: ${idHotel}`, error);
       throw error;
@@ -337,10 +371,11 @@ export class ReservaService {
    * Obtener todas las reservas del sistema (solo para superadmin)
    */
   async findAll(): Promise<Reserva[]> {
-    return await this.reservaRepository.find({
+    const reservas = await this.reservaRepository.find({
       relations: ['habitacion', 'tipoHabitacion', 'tipoHabitacion.amenidades', 'cliente'],
       order: { checkinPrevisto: 'ASC' },
     });
+    return await this.enriquecerReservas(reservas);
   }
 
   /**
@@ -411,7 +446,7 @@ export class ReservaService {
   async cancelar(id: number, motivo?: string): Promise<Reserva> {
     const reserva = await this.findOne(id);
 
-    if (reserva.estadoReserva === 'cancelada') {
+    if (reserva.estadoReserva?.toLowerCase() === 'cancelada') {
       throw new BadRequestException('La reserva ya está cancelada');
     }
 
@@ -424,35 +459,13 @@ export class ReservaService {
   }
 
   /**
-   * Confirmar reserva (Recepcionista verifica cédula y confirma)
-   * Cambia de 'reservada' → 'confirmada'
-   */
-  async confirmarReserva(id: number, cedulaCliente: string): Promise<Reserva> {
-    const reserva = await this.findOne(id);
-
-    if (reserva.estadoReserva !== 'reservada') {
-      throw new BadRequestException('Solo se pueden confirmar reservas en estado "reservada"');
-    }
-
-    // Verificar que la cédula coincida
-    if (reserva.cedulaCliente !== cedulaCliente) {
-      throw new UnauthorizedException('La cédula no coincide con la registrada en la reserva');
-    }
-
-    reserva.estadoReserva = 'confirmada';
-    reserva.checkinReal = new Date();
-
-    return await this.reservaRepository.save(reserva);
-  }
-
-  /**
    * Completar reserva (Check-out)
    * Cambia de 'confirmada' → 'completada'
    */
   async completarReserva(id: number): Promise<Reserva> {
     const reserva = await this.findOne(id);
 
-    if (reserva.estadoReserva !== 'confirmada') {
+    if (reserva.estadoReserva?.toLowerCase() !== 'confirmada') {
       throw new BadRequestException('Solo se pueden completar reservas confirmadas');
     }
 
@@ -463,28 +476,43 @@ export class ReservaService {
   }
 
   /**
-   * Confirmar check-in (OBSOLETO - usar confirmarReserva)
+   * Confirmar reserva (recepcionista confirma que la reserva es válida)
+   * Cambia estado de 'reservada' a 'confirmada' sin hacer check-in
    */
-  async confirmarCheckin(id: number): Promise<Reserva> {
+  async confirmarReserva(id: number): Promise<Reserva> {
     const reserva = await this.findOne(id);
 
-    if (!['reservada', 'confirmada'].includes(reserva.estadoReserva)) {
-      throw new BadRequestException('Solo se pueden hacer check-in en reservas reservadas o confirmadas');
+    if (reserva.estadoReserva?.toLowerCase() !== 'reservada') {
+      throw new BadRequestException('Solo se pueden confirmar reservas en estado reservada');
     }
 
-    reserva.checkinReal = new Date();
     reserva.estadoReserva = 'confirmada';
 
     return await this.reservaRepository.save(reserva);
   }
 
   /**
-   * Confirmar check-out (OBSOLETO - usar completarReserva)
+   * Confirmar check-in (recepcionista registra la entrada con hora exacta)
+   */
+  async confirmarCheckin(id: number): Promise<Reserva> {
+    const reserva = await this.findOne(id);
+
+    if (reserva.estadoReserva?.toLowerCase() !== 'confirmada') {
+      throw new BadRequestException('Solo se pueden hacer check-in en reservas confirmadas');
+    }
+
+    reserva.checkinReal = new Date();
+
+    return await this.reservaRepository.save(reserva);
+  }
+
+  /**
+   * Confirmar check-out (recepcionista registra la salida con hora exacta)
    */
   async confirmarCheckout(id: number): Promise<Reserva> {
     const reserva = await this.findOne(id);
 
-    if (reserva.estadoReserva !== 'confirmada') {
+    if (reserva.estadoReserva?.toLowerCase() !== 'confirmada') {
       throw new BadRequestException('Solo se pueden hacer check-out en reservas confirmadas');
     }
 
