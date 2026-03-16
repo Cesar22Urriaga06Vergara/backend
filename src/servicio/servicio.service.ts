@@ -357,4 +357,80 @@ export class ServicioService {
       resumenPorCategoria,
     };
   }
+
+  /**
+   * Obtener estadísticas de servicios/pedidos para un hotel
+   * Retorna: total, entregados, pendientes, ingresos brutos por categoría
+   */
+  async getEstadisticasPedidos(idHotel: number, periodo?: 'mes_actual' | 'trimestre_actual' | 'anio_actual'): Promise<any> {
+    const query = this.pedidoRepository
+      .createQueryBuilder('pedido')
+      .leftJoinAndSelect('pedido.items', 'items')
+      .where('pedido.id_hotel = :idHotel', { idHotel });
+
+    // Filtrar por período si es especificado
+    if (periodo) {
+      const ahora = new Date();
+      let fechaInicio = new Date();
+
+      if (periodo === 'mes_actual') {
+        fechaInicio = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+      } else if (periodo === 'trimestre_actual') {
+        const trimestre = Math.floor(ahora.getMonth() / 3);
+        fechaInicio = new Date(ahora.getFullYear(), trimestre * 3, 1);
+      } else if (periodo === 'anio_actual') {
+        fechaInicio = new Date(ahora.getFullYear(), 0, 1);
+      }
+
+      query.andWhere('pedido.createdAt >= :fechaInicio', { fechaInicio });
+    }
+
+    const pedidos = await query.getMany();
+
+    // Calcular estadísticas
+    const total = pedidos.length;
+    const entregados = pedidos.filter(p => p.estadoPedido === 'entregado').length;
+    const pendientes = pedidos.filter(p => p.estadoPedido === 'pendiente').length;
+    const en_preparacion = pedidos.filter(p => p.estadoPedido === 'en_preparacion').length;
+    const cancelados = pedidos.filter(p => p.estadoPedido === 'cancelado').length;
+
+    // Calcular ingresos brutos y distribuir por categoría
+    const ingresoBrutoPorCategoria: Record<string, number> = {};
+    let ingresosBrutos = 0;
+
+    for (const pedido of pedidos) {
+      if (['entregado', 'en_preparacion'].includes(pedido.estadoPedido)) {
+        const totalPedido = pedido.totalPedido || 0;
+        ingresosBrutos += totalPedido;
+
+        const categoria = pedido.categoria || 'sin_categoría';
+        if (!ingresoBrutoPorCategoria[categoria]) {
+          ingresoBrutoPorCategoria[categoria] = 0;
+        }
+        ingresoBrutoPorCategoria[categoria] += totalPedido;
+      }
+    }
+
+    // Ticket promedio
+    const ticketPromedio = entregados > 0 ? ingresosBrutos / entregados : 0;
+
+    // Tasa de entrega
+    const tasaEntrega = total > 0 ? (entregados / total * 100).toFixed(2) : '0.00';
+
+    return {
+      idHotel,
+      periodo: periodo || 'todos',
+      totalPedidos: total,
+      pedidosEntregados: entregados,
+      pedidosPendientes: pendientes,
+      pedidosEnPreparacion: en_preparacion,
+      pedidosCancelados: cancelados,
+      ingresosBrutos: parseFloat(ingresosBrutos.toFixed(2)),
+      ingresoBrutoPorCategoria: Object.fromEntries(
+        Object.entries(ingresoBrutoPorCategoria).map(([k, v]) => [k, parseFloat(v.toFixed(2))])
+      ),
+      ticketPromedio: parseFloat(ticketPromedio.toFixed(2)),
+      tasaEntrega: parseFloat(tasaEntrega),
+    };
+  }
 }

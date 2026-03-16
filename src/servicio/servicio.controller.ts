@@ -178,6 +178,22 @@ export class ServicioController {
   async obtenerCuentaReserva(@Param('idReserva') idReserva: number) {
     return await this.servicioService.obtenerCuentaReserva(idReserva);
   }
+
+  // ── ENDPOINT DE ESTADÍSTICAS ──
+
+  @Get('stats/:idHotel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('recepcionista', 'admin', 'superadmin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener estadísticas de servicios/pedidos del hotel' })
+  @ApiResponse({ status: 200, description: 'Estadísticas obtenidas exitosamente' })
+  async getEstadisticasPedidos(
+    @Param('idHotel') idHotel: number,
+    @Query('periodo') periodo?: 'mes_actual' | 'trimestre_actual' | 'anio_actual',
+    @Req() req?: any,
+  ): Promise<any> {
+    return await this.servicioService.getEstadisticasPedidos(idHotel, periodo);
+  }
 }
 
 

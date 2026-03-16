@@ -534,4 +534,73 @@ export class ReservaService {
 
     await this.reservaRepository.remove(reserva);
   }
+
+  /**
+   * Obtener estadísticas de reservas para un hotel
+   * Retorna: total, confirmadas, completadas, canceladas, ingresos brutos
+   */
+  async getEstadisticas(idHotel: number, periodo?: 'mes_actual' | 'trimestre_actual' | 'anio_actual'): Promise<any> {
+    const query = this.reservaRepository
+      .createQueryBuilder('reserva')
+      .where('reserva.id_hotel = :idHotel', { idHotel });
+
+    // Filtrar por período si es especificado
+    if (periodo) {
+      const ahora = new Date();
+      let fechaInicio = new Date();
+
+      if (periodo === 'mes_actual') {
+        fechaInicio = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+      } else if (periodo === 'trimestre_actual') {
+        const trimestre = Math.floor(ahora.getMonth() / 3);
+        fechaInicio = new Date(ahora.getFullYear(), trimestre * 3, 1);
+      } else if (periodo === 'anio_actual') {
+        fechaInicio = new Date(ahora.getFullYear(), 0, 1);
+      }
+
+      query.andWhere('reserva.created_at >= :fechaInicio', { fechaInicio });
+    }
+
+    const reservas = await query.getMany();
+
+    // Calcular estadísticas
+    const total = reservas.length;
+    const confirmadas = reservas.filter(r => r.estadoReserva === 'confirmada').length;
+    const completadas = reservas.filter(r => r.estadoReserva === 'completada').length;
+    const canceladas = reservas.filter(r => r.estadoReserva === 'cancelada').length;
+    const pendientes = reservas.filter(r => r.estadoReserva === 'reservada').length;
+
+    // Calcular ingresos brutos (precio * noches por cada reserva completada/confirmada)
+    const ingresosBrutos = reservas
+      .filter(r => ['confirmada', 'completada'].includes(r.estadoReserva))
+      .reduce((sum, r) => {
+        const noches = Math.ceil(
+          (new Date(r.checkoutPrevisto).getTime() - new Date(r.checkinPrevisto).getTime()) / 
+          (1000 * 60 * 60 * 24)
+        );
+        return sum + (r.precioNocheSnapshot * noches);
+      }, 0);
+
+    // Tasa de ocupación estimada
+    const tasaOcupacion = total > 0 ? (completadas / total * 100).toFixed(2) : '0.00';
+
+    return {
+      idHotel,
+      periodo: periodo || 'todos',
+      totalReservas: total,
+      reservasConfirmadas: confirmadas,
+      reservasCompletadas: completadas,
+      reservasCanceladas: canceladas,
+      reservasPendientes: pendientes,
+      ingresosBrutos: parseFloat(ingresosBrutos.toFixed(2)),
+      tasaOcupacion: parseFloat(tasaOcupacion),
+      promedioNochesPorReserva: total > 0 ? (reservas.reduce((sum, r) => {
+        const noches = Math.ceil(
+          (new Date(r.checkoutPrevisto).getTime() - new Date(r.checkinPrevisto).getTime()) / 
+          (1000 * 60 * 60 * 24)
+        );
+        return sum + noches;
+      }, 0) / total).toFixed(2) : '0.00',
+    };
+  }
 }

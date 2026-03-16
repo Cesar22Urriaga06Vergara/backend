@@ -603,4 +603,41 @@ export class ReservaController {
     await this.reservaService.remove(id);
     return { message: 'Reserva eliminada correctamente' };
   }
+
+  /**
+   * GET /reservas/stats/:idHotel
+   * Obtener estadísticas de reservas de un hotel (PROTEGIDA)
+   * - Recepcionista/Admin solo de su hotel
+   * - Superadmin puede consultarsobre cualquier hotel
+   */
+  @Get('stats/:idHotel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('recepcionista', 'admin', 'superadmin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener estadísticas de reservas del hotel' })
+  @ApiParam({ name: 'idHotel', type: Number })
+  @ApiQuery({ name: 'periodo', enum: ['mes_actual', 'trimestre_actual', 'anio_actual'], required: false })
+  @ApiResponse({ status: 200, description: 'Estadísticas obtenidas exitosamente' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({ status: 403, description: 'Acceso denegado' })
+  async getEstadisticas(
+    @Param('idHotel', ParseIntPipe) idHotel: number,
+    @Query('periodo') periodo?: 'mes_actual' | 'trimestre_actual' | 'anio_actual',
+    @Request() req?: any,
+  ): Promise<any> {
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+
+    // Validar permisos
+    if (
+      (userRole === 'recepcionista' || userRole === 'admin') &&
+      userIdHotel !== idHotel
+    ) {
+      throw new ForbiddenException(
+        `No tienes acceso a estadísticas del hotel ${idHotel}. Solo puedo acceder al hotel ${userIdHotel}`,
+      );
+    }
+
+    return await this.reservaService.getEstadisticas(idHotel, periodo);
+  }
 }
