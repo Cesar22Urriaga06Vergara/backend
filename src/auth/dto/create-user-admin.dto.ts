@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsNotEmpty, MinLength, IsEnum, Optional } from 'class-validator';
+import { IsString, IsEmail, IsNotEmpty, MinLength, IsEnum, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 /**
@@ -46,7 +46,7 @@ export class CreateUserAdminDto {
     description: 'Cédula del usuario (opcional)',
     required: false,
   })
-  @Optional()
+  @IsOptional()
   @IsString()
   cedula?: string;
 
@@ -55,6 +55,6 @@ export class CreateUserAdminDto {
     description: 'Si el usuario está activo',
     required: false,
   })
-  @Optional()
+  @IsOptional()
   isActive?: boolean;
 }
