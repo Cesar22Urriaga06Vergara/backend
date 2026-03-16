@@ -296,16 +296,14 @@ export class AuthService {
         throw new ConflictException('El email ya está registrado');
       }
 
-      // Hashear la contraseña
-      const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-
+      // NO hashear aquí - dejar que empleadoService.create() lo haga
       // Crear el empleado
       const empleado = await this.empleadoService.create({
         cedula: createUserDto.cedula || `TEMP-${Date.now()}`, // Generar cédula temporal si no se proporciona
         nombre: createUserDto.nombre,
         apellido: '', // El nombre completo viene como un solo string
         email: createUserDto.email,
-        password: hashedPassword,
+        password: createUserDto.password, // Pasar sin hashear
         rol: createUserDto.role,
         id_hotel: 1, // Default hotel
         estado: createUserDto.isActive !== false ? 'activo' : 'inactivo',
