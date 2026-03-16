@@ -4,6 +4,8 @@ import {
   BadRequestException,
   ConflictException,
   UnauthorizedException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, LessThan, MoreThan, Between } from 'typeorm';
@@ -15,6 +17,7 @@ import { CreateReservaDto } from './dto/create-reserva.dto';
 import { UpdateReservaDto } from './dto/update-reserva.dto';
 import { DisponibilidadQueryDto } from './dto/disponibilidad-query.dto';
 import { DisponibilidadResponseDto, HabitacionDisponibleDto } from './dto/disponibilidad.dto';
+import { FacturaService } from '../factura/factura.service';
 
 @Injectable()
 export class ReservaService {
@@ -28,6 +31,8 @@ export class ReservaService {
     @InjectRepository(Cliente)
     private clienteRepository: Repository<Cliente>,
     private dataSource: DataSource,
+    @Inject(forwardRef(() => FacturaService))
+    private facturaService: FacturaService,
   ) {}
 
   /**
@@ -508,8 +513,9 @@ export class ReservaService {
 
   /**
    * Confirmar check-out (recepcionista registra la salida con hora exacta)
+   * Después del checkout, se genera la factura automáticamente
    */
-  async confirmarCheckout(id: number): Promise<Reserva> {
+  async confirmarCheckout(id: number): Promise<{ reserva: Reserva; factura?: any }> {
     const reserva = await this.findOne(id);
 
     if (reserva.estadoReserva?.toLowerCase() !== 'confirmada') {
@@ -519,7 +525,20 @@ export class ReservaService {
     reserva.checkoutReal = new Date();
     reserva.estadoReserva = 'completada';
 
-    return await this.reservaRepository.save(reserva);
+    const reservaGuardada = await this.reservaRepository.save(reserva);
+
+    // Generar factura automáticamente al hacer checkout (si FacturaService está disponible)
+    let factura = null;
+    try {
+      if (this.facturaService) {
+        factura = await this.facturaService.generarDesdeReserva(reservaGuardada);
+      }
+    } catch (error) {
+      // Si la factura ya existe o hay otro error, loguear pero no fallar el checkout
+      console.warn('Advertencia al generar factura:', error.message);
+    }
+
+    return { reserva: reservaGuardada, factura };
   }
 
   /**

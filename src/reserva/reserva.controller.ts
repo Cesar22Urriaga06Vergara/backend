@@ -495,7 +495,7 @@ export class ReservaController {
   async confirmarCheckout(
     @Param('id', ParseIntPipe) id: number,
     @Request() req,
-  ): Promise<Reserva> {
+  ): Promise<{ reserva: Reserva; factura?: any }> {
     const reserva = await this.reservaService.findOne(id);
     if (!reserva) {
       throw new NotFoundException(`Reserva ${id} no encontrada`);

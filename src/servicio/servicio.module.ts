@@ -11,6 +11,6 @@ import { Reserva } from '../reserva/entities/reserva.entity';
   imports: [TypeOrmModule.forFeature([Servicio, Pedido, PedidoItem, Reserva])],
   controllers: [ServicioController],
   providers: [ServicioService],
-  exports: [ServicioService],
+  exports: [ServicioService, TypeOrmModule],
 })
 export class ServicioModule {}

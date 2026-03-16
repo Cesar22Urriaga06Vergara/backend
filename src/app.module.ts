@@ -13,6 +13,9 @@ import { ClienteModule } from './cliente/cliente.module';
 import { EmpleadoModule } from './empleado/empleado.module';
 import { HotelModule } from './hotel/hotel.module';
 import { ServicioModule } from './servicio/servicio.module';
+import { FacturaModule } from './factura/factura.module';
+import { MedioPagoModule } from './medio-pago/medio-pago.module';
+import { PagoModule } from './pago/pago.module';
 
 @Module({
   imports: [
@@ -54,6 +57,9 @@ import { ServicioModule } from './servicio/servicio.module';
     ClienteModule,
     EmpleadoModule,
     ServicioModule,
+    FacturaModule,
+    MedioPagoModule,
+    PagoModule,
 
   ],
   controllers: [AppController],

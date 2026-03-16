@@ -1,0 +1,19 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { PagoService } from './pago.service';
+import { PagoController } from './pago.controller';
+import { Pago } from './entities/pago.entity';
+import { FacturaModule } from '../factura/factura.module';
+import { MedioPagoModule } from '../medio-pago/medio-pago.module';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Pago]),
+    FacturaModule,
+    MedioPagoModule,
+  ],
+  controllers: [PagoController],
+  providers: [PagoService],
+  exports: [PagoService],
+})
+export class PagoModule {}
