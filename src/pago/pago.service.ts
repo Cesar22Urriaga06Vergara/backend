@@ -51,7 +51,7 @@ export class PagoService {
     }
 
     // Crear y guardar el pago
-    const pago = this.pagoRepository.create({
+    const pagoBd = await this.pagoRepository.save({
       idFactura: dto.idFactura,
       idMedioPago: dto.idMedioPago,
       monto: dto.monto,
@@ -59,9 +59,7 @@ export class PagoService {
       idEmpleadoRegistro: idEmpleado || null,
       estado: 'completado',
       observaciones: dto.observaciones || null,
-    });
-
-    const pagoBd = await this.pagoRepository.save(pago);
+    } as any);
 
     // Recalcular estado de la factura
     const pagosCompletados = await this.pagoRepository.find({
@@ -79,10 +77,16 @@ export class PagoService {
       await this.facturaService['facturaRepository'].save(factura);
     }
 
-    return this.pagoRepository.findOne({
+    const pagoGuardado = await this.pagoRepository.findOne({
       where: { id: pagoBd.id },
       relations: ['medioPago', 'factura'],
     });
+
+    if (!pagoGuardado) {
+      throw new BadRequestException('Error al guardar el pago');
+    }
+
+    return pagoGuardado;
   }
 
   /**
@@ -163,9 +167,15 @@ export class PagoService {
       await this.pagoRepository.manager.save(factura);
     }
 
-    return this.pagoRepository.findOne({
+    const pagoDevoluto = await this.pagoRepository.findOne({
       where: { id: pagoDev.id },
       relations: ['medioPago', 'factura'],
     });
+
+    if (!pagoDevoluto) {
+      throw new BadRequestException('Error al procesar la devolución');
+    }
+
+    return pagoDevoluto;
   }
 }

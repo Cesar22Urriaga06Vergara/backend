@@ -3,6 +3,8 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -27,6 +29,7 @@ export class FacturaService {
     @InjectRepository(PedidoItem)
     private pedidoItemRepository: Repository<PedidoItem>,
     private dataSource: DataSource,
+    @Inject(forwardRef(() => ReservaService))
     private reservaService: ReservaService,
   ) {}
 
@@ -170,7 +173,7 @@ export class FacturaService {
 
       await queryRunner.commitTransaction();
 
-      return facturaCompleta;
+      return facturaCompleta || new Factura();
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -187,32 +190,32 @@ export class FacturaService {
     estado?: string;
     idCliente?: number;
   }): Promise<Factura[]> {
-    const query = this.facturaRepository.createQueryBuilder('f');
+    let query = this.facturaRepository.createQueryBuilder('f');
 
     if (filters?.idHotel) {
-      query.where('f.idHotel = :idHotel', { idHotel: filters.idHotel });
+      query = query.where('f.idHotel = :idHotel', { idHotel: filters.idHotel });
     }
 
     if (filters?.estado) {
-      if (!query.parameters.length) {
-        query.where('f.estado = :estado', { estado: filters.estado });
+      if (filters?.idHotel) {
+        query = query.andWhere('f.estado = :estado', { estado: filters.estado });
       } else {
-        query.andWhere('f.estado = :estado', { estado: filters.estado });
+        query = query.where('f.estado = :estado', { estado: filters.estado });
       }
     }
 
     if (filters?.idCliente) {
-      if (!query.parameters.length) {
-        query.where('f.idCliente = :idCliente', { idCliente: filters.idCliente });
+      if (filters?.idHotel || filters?.estado) {
+        query = query.andWhere('f.idCliente = :idCliente', { idCliente: filters.idCliente });
       } else {
-        query.andWhere('f.idCliente = :idCliente', { idCliente: filters.idCliente });
+        query = query.where('f.idCliente = :idCliente', { idCliente: filters.idCliente });
       }
     }
 
-    query.leftJoinAndSelect('f.detalles', 'detalles');
-    query.leftJoinAndSelect('f.pagos', 'pagos');
-    query.leftJoinAndSelect('f.reserva', 'reserva');
-    query.orderBy('f.createdAt', 'DESC');
+    query = query.leftJoinAndSelect('f.detalles', 'detalles');
+    query = query.leftJoinAndSelect('f.pagos', 'pagos');
+    query = query.leftJoinAndSelect('f.reserva', 'reserva');
+    query = query.orderBy('f.createdAt', 'DESC');
 
     return query.getMany();
   }

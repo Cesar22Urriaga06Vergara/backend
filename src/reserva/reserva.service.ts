@@ -18,6 +18,7 @@ import { UpdateReservaDto } from './dto/update-reserva.dto';
 import { DisponibilidadQueryDto } from './dto/disponibilidad-query.dto';
 import { DisponibilidadResponseDto, HabitacionDisponibleDto } from './dto/disponibilidad.dto';
 import { FacturaService } from '../factura/factura.service';
+import { Factura } from '../factura/entities/factura.entity';
 
 @Injectable()
 export class ReservaService {
@@ -528,7 +529,7 @@ export class ReservaService {
     const reservaGuardada = await this.reservaRepository.save(reserva);
 
     // Generar factura automáticamente al hacer checkout (si FacturaService está disponible)
-    let factura = null;
+    let factura: Factura | null = null;
     try {
       if (this.facturaService) {
         factura = await this.facturaService.generarDesdeReserva(reservaGuardada);

@@ -9,8 +9,6 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Reserva } from '../../reserva/entities/reserva.entity';
-import { DetalleFactura } from './detalle-factura.entity';
-import { Pago } from '../../pago/entities/pago.entity';
 
 @Entity('facturas')
 export class Factura {
@@ -80,14 +78,14 @@ export class Factura {
   @Column({ nullable: true })
   cufe: string;
 
-  @OneToMany(() => DetalleFactura, (d) => d.factura, {
+  @OneToMany('DetalleFactura', 'factura', {
     cascade: true,
     eager: true,
   })
-  detalles: DetalleFactura[];
+  detalles: any[];
 
-  @OneToMany(() => Pago, (p) => p.factura)
-  pagos: Pago[];
+  @OneToMany('Pago', 'factura')
+  pagos: any[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
