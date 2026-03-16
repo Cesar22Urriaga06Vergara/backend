@@ -1,8 +1,9 @@
-import { Controller, Get, UseGuards, Delete, Post, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, UseGuards, Delete, Post, Param, ParseIntPipe, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
+import { CreateUserAdminDto } from './dto/create-user-admin.dto';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -35,6 +36,26 @@ export class UsuariosController {
       users: result.users,
       count: result.count,
     };
+  }
+
+  /**
+   * POST /users
+   * Crear un nuevo usuario
+   * Requiere autenticación JWT y rol admin o superadmin
+   */
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'superadmin')
+  @Post()
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Crear un nuevo usuario (Admin/Superadmin)' })
+  @ApiResponse({ status: 201, description: 'Usuario creado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({ status: 403, description: 'No tienes permisos' })
+  @ApiResponse({ status: 409, description: 'El email ya existe' })
+  async createUser(@Body() createUserDto: CreateUserAdminDto) {
+    const result = await this.authService.createUserAdmin(createUserDto);
+    return result;
   }
 
   /**

@@ -6,6 +6,7 @@ import { EmpleadoService } from '../empleado/empleado.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { CreateSuperadminDto } from './dto/create-superadmin.dto';
+import { CreateUserAdminDto } from './dto/create-user-admin.dto';
 import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
 
 @Injectable()
@@ -278,6 +279,62 @@ export class AuthService {
       // Manejo de errores de duplicado
       if (error.code === 'ER_DUP_ENTRY') {
         throw new ConflictException('El email o cédula ya está registrado');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Crear un usuario desde admin/superadmin
+   * Permite crear empleados con diferentes roles
+   */
+  async createUserAdmin(createUserDto: CreateUserAdminDto) {
+    try {
+      // Verificar que el email no exista
+      const emailExistente = await this.empleadoService.findByEmail(createUserDto.email);
+      if (emailExistente) {
+        throw new ConflictException('El email ya está registrado');
+      }
+
+      // Hashear la contraseña
+      const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+
+      // Crear el empleado
+      const empleado = await this.empleadoService.create({
+        cedula: createUserDto.cedula || `TEMP-${Date.now()}`, // Generar cédula temporal si no se proporciona
+        nombre: createUserDto.nombre,
+        apellido: '', // El nombre completo viene como un solo string
+        email: createUserDto.email,
+        password: hashedPassword,
+        rol: createUserDto.role,
+        id_hotel: 1, // Default hotel
+        estado: createUserDto.isActive !== false ? 'activo' : 'inactivo',
+      });
+
+      return {
+        message: `Usuario ${createUserDto.role} creado exitosamente`,
+        user: {
+          _id: empleado.id.toString(),
+          id: empleado.id,
+          name: empleado.nombre,
+          fullName: empleado.nombre,
+          email: empleado.email,
+          role: empleado.rol.toLowerCase(),
+          isActive: empleado.estado === 'activo',
+          idEmpleado: empleado.id,
+          idHotel: empleado.id_hotel,
+          createdAt: empleado.createdAt,
+          updatedAt: empleado.updatedAt,
+        },
+      };
+    } catch (error) {
+      // Re-lanzar errores específicos
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+      // Manejo de errores de duplicado
+      if (error.code === 'ER_DUP_ENTRY') {
+        throw new ConflictException('El email ya está registrado');
       }
       throw error;
     }
