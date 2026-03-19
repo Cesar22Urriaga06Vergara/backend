@@ -34,10 +34,14 @@ export class PagoController {
   /**
    * POST /pagos
    * Registrar un nuevo pago para una factura
+   * 
+   * Nota importante: Solo recepcionista y superadmin pueden registrar pagos
+   * Los admins del hotel SOLO pueden ver reportes de pagos, no operarlos.
+   * Esta segregación de funciones previene fraude (segregation of duties).
    */
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'admin', 'superadmin')
+  @Roles('recepcionista', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Registrar nuevo pago' })
   @ApiResponse({ status: 201, description: 'Pago registrado exitosamente' })

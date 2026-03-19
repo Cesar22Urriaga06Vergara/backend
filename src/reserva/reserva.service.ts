@@ -19,6 +19,11 @@ import { DisponibilidadQueryDto } from './dto/disponibilidad-query.dto';
 import { DisponibilidadResponseDto, HabitacionDisponibleDto } from './dto/disponibilidad.dto';
 import { FacturaService } from '../factura/factura.service';
 import { Factura } from '../factura/entities/factura.entity';
+import {
+  ReservaEstado,
+  esTransicionValida,
+  obtenerEstadosValidos,
+} from './constants/reserva-estados';
 
 @Injectable()
 export class ReservaService {
@@ -53,6 +58,22 @@ export class ReservaService {
     const timestamp = Date.now().toString(36).toUpperCase();
     const random = Math.random().toString(36).substring(2, 8).toUpperCase();
     return `RES-${timestamp}-${random}`;
+  }
+
+  /**
+   * Validar transición de estado
+   * @param estadoActual Estado actual de la reserva
+   * @param estadoNuevo Estado al que se quiere cambiar
+   * @throws BadRequestException si la transición no es válida
+   */
+  private validarTransicionEstado(estadoActual: string, estadoNuevo: string): void {
+    if (!esTransicionValida(estadoActual, estadoNuevo)) {
+      const estadosValidos = obtenerEstadosValidos(estadoActual);
+      throw new BadRequestException(
+        `No se puede transicionar de "${estadoActual}" a "${estadoNuevo}". ` +
+        `Estados válidos desde "${estadoActual}": ${estadosValidos.join(', ')}`,
+      );
+    }
   }
 
   /**
@@ -309,6 +330,23 @@ export class ReservaService {
   }
 
   /**
+   * Obtener la reserva activa de un cliente (estado 'confirmada')
+   * Usada por el frontend del cliente para determinar su idHotel
+   * @param idCliente ID del cliente
+   * @returns Reserva activa o null si no existe
+   */
+  async findReservaActivaByCliente(idCliente: number): Promise<Reserva | null> {
+    return await this.reservaRepository.findOne({
+      where: {
+        idCliente,
+        estadoReserva: 'confirmada',
+      },
+      relations: ['habitacion', 'tipoHabitacion'],
+      order: { checkinPrevisto: 'DESC' },
+    });
+  }
+
+  /**
    * Obtener reservas de cliente con filtrado por rol del requester
    * - Si es cliente: solo sus propias reservas
    * - Si es recepcionista/admin: solo de su hotel
@@ -435,8 +473,13 @@ export class ReservaService {
       reserva.checkoutPrevisto = checkoutPrevisto;
     }
 
+    // Validar cambio de estado con máquina de estados
     if (updateReservaDto.estadoReserva) {
-      reserva.estadoReserva = updateReservaDto.estadoReserva;
+      this.validarTransicionEstado(
+        reserva.estadoReserva?.toLowerCase(),
+        updateReservaDto.estadoReserva.toLowerCase(),
+      );
+      reserva.estadoReserva = updateReservaDto.estadoReserva.toLowerCase();
     }
 
     if (updateReservaDto.observaciones) {
@@ -452,11 +495,13 @@ export class ReservaService {
   async cancelar(id: number, motivo?: string): Promise<Reserva> {
     const reserva = await this.findOne(id);
 
-    if (reserva.estadoReserva?.toLowerCase() === 'cancelada') {
-      throw new BadRequestException('La reserva ya está cancelada');
-    }
+    // Validar transición de estado
+    this.validarTransicionEstado(
+      reserva.estadoReserva?.toLowerCase(),
+      ReservaEstado.CANCELADA,
+    );
 
-    reserva.estadoReserva = 'cancelada';
+    reserva.estadoReserva = ReservaEstado.CANCELADA;
     if (motivo) {
       reserva.observaciones = (reserva.observaciones ? reserva.observaciones + '\n' : '') + `Cancelación: ${motivo}`;
     }
@@ -483,31 +528,53 @@ export class ReservaService {
 
   /**
    * Confirmar reserva (recepcionista confirma que la reserva es válida)
-   * Cambia estado de 'reservada' a 'confirmada' sin hacer check-in
+   * Cambia estado de 'reservada' a 'confirmada' sin hacer check-in físico
+   * Permite que recepcionista confirme reserva antes de que cliente llegue
    */
   async confirmarReserva(id: number): Promise<Reserva> {
     const reserva = await this.findOne(id);
 
-    if (reserva.estadoReserva?.toLowerCase() !== 'reservada') {
-      throw new BadRequestException('Solo se pueden confirmar reservas en estado reservada');
-    }
+    // Validar transición de estado
+    this.validarTransicionEstado(
+      reserva.estadoReserva?.toLowerCase(),
+      ReservaEstado.CONFIRMADA,
+    );
 
-    reserva.estadoReserva = 'confirmada';
+    reserva.estadoReserva = ReservaEstado.CONFIRMADA;
 
     return await this.reservaRepository.save(reserva);
   }
 
   /**
-   * Confirmar check-in (recepcionista registra la entrada con hora exacta)
+   * Confirmar check-in (recepcionista registra la entrada del cliente con hora exacta)
+   * A partir de Fase 1: check-in TAMBIÉN transiciona a CONFIRMADA
+   * Registra checkinReal = ahora
+   * 
+   * FLUJO:
+   * - Cliente crea reserva en estado RESERVADA
+   * - Recepcionista confirma (confirmarReserva) → CONFIRMADA
+   * - Cliente llega, recepcionista registra entrada (confirmarCheckin) → checkinReal = now
    */
   async confirmarCheckin(id: number): Promise<Reserva> {
     const reserva = await this.findOne(id);
 
-    if (reserva.estadoReserva?.toLowerCase() !== 'confirmada') {
-      throw new BadRequestException('Solo se pueden hacer check-in en reservas confirmadas');
+    // Validar que está en estado RESERVADA o CONFIRMADA (puede hacer check-in)
+    if (![ReservaEstado.RESERVADA, ReservaEstado.CONFIRMADA].includes(
+      reserva.estadoReserva?.toLowerCase() as any,
+    )) {
+      throw new BadRequestException(
+        `No se puede hacer check-in en una reserva en estado "${reserva.estadoReserva}". ` +
+        `La reserva debe estar en estado "reservada" o "confirmada".`,
+      );
     }
 
+    // Registrar hora de entrada
     reserva.checkinReal = new Date();
+    
+    // Asegurar que está en CONFIRMADA (puede haber saltado confirmarReserva)
+    if (reserva.estadoReserva?.toLowerCase() !== ReservaEstado.CONFIRMADA) {
+      reserva.estadoReserva = ReservaEstado.CONFIRMADA;
+    }
 
     return await this.reservaRepository.save(reserva);
   }
@@ -515,40 +582,80 @@ export class ReservaService {
   /**
    * Confirmar check-out (recepcionista registra la salida con hora exacta)
    * Después del checkout, se genera la factura automáticamente
+   * 
+   * NOTA: Transacción completa se implementará en Fase 2
+   * Actualmente: cambio de estado + llamada a generación de factura
    */
   async confirmarCheckout(id: number): Promise<{ reserva: Reserva; factura?: any }> {
-    const reserva = await this.findOne(id);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    if (reserva.estadoReserva?.toLowerCase() !== 'confirmada') {
-      throw new BadRequestException('Solo se pueden hacer check-out en reservas confirmadas');
-    }
-
-    reserva.checkoutReal = new Date();
-    reserva.estadoReserva = 'completada';
-
-    const reservaGuardada = await this.reservaRepository.save(reserva);
-
-    // Generar factura automáticamente al hacer checkout (si FacturaService está disponible)
-    let factura: Factura | null = null;
     try {
-      if (this.facturaService) {
-        console.log(`[FACTURA] Iniciando generación de factura para reserva ${reservaGuardada.id}...`);
-        factura = await this.facturaService.generarDesdeReserva(reservaGuardada);
-        console.log(`[FACTURA] ✅ Factura generada exitosamente:`, factura?.numeroFactura);
-      } else {
-        console.warn('[FACTURA] ⚠️ FacturaService no disponible, omitiendo generación');
-      }
-    } catch (error: any) {
-      // Loguear el error completo para debugging
-      console.error('❌ [FACTURA] Error al generar factura:', {
-        message: error?.message,
-        code: error?.code,
-        stack: error?.stack,
-        reservaId: reservaGuardada.id,
-      });
-    }
+      // Usar queryRunner para las operaciones dentro de la transacción
+      const reserva = await queryRunner.manager.findOne(Reserva, { where: { id } });
 
-    return { reserva: reservaGuardada, factura };
+      if (!reserva) {
+        throw new NotFoundException(`Reserva ${id} no encontrada`);
+      }
+
+      // Validar transición de estado
+      this.validarTransicionEstado(
+        reserva.estadoReserva?.toLowerCase(),
+        ReservaEstado.COMPLETADA,
+      );
+
+      // Validar que hay check-in
+      if (!reserva.checkinReal) {
+        throw new BadRequestException(
+          'No se puede hacer check-out sin haber confirmado check-in previamente',
+        );
+      }
+
+      // Actualizar reserva
+      reserva.checkoutReal = new Date();
+      reserva.estadoReserva = ReservaEstado.COMPLETADA;
+
+      const reservaGuardada = await queryRunner.manager.save(Reserva, reserva);
+
+      // Generar factura dentro de la transacción
+      let factura: Factura | null = null;
+      try {
+        if (this.facturaService) {
+          console.log(`[FACTURA] Iniciando generación de factura para reserva ${reservaGuardada.id}...`);
+          // Crear factura usando el queryRunner existente para mantener la transacción
+          factura = await this.facturaService.generarDesdeReserva(reservaGuardada, queryRunner);
+          console.log(`[FACTURA] ✅ Factura generada exitosamente:`, factura?.numeroFactura);
+        } else {
+          console.warn('[FACTURA] ⚠️ FacturaService no disponible, omitiendo generación');
+        }
+      } catch (error: any) {
+        // Loguear el error y hacer rollback de toda la transacción
+        console.error('❌ [FACTURA] Error al generar factura:', {
+          message: error?.message,
+          code: error?.code,
+          stack: error?.stack,
+          reservaId: reservaGuardada.id,
+        });
+
+        // Hacer rollback para revertir cambios en reserva y factura
+        throw error;
+      }
+
+      // Si llegamos aquí, hacer commit de toda la transacción
+      await queryRunner.commitTransaction();
+
+      return { reserva: reservaGuardada, factura };
+    } catch (error: any) {
+      // Hacer rollback de la transacción completa
+      await queryRunner.rollbackTransaction();
+
+      // Re-lanzar el error
+      throw error;
+    } finally {
+      // Liberar el queryRunner
+      await queryRunner.release();
+    }
   }
 
   /**

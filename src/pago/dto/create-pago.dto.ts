@@ -11,6 +11,12 @@ export class CreatePagoDto {
   @Min(0.01)
   monto: number;
 
+  // Monto recibido en efectivo (solo requerido si medioPago = 'efectivo')
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  montoRecibido?: number;
+
   @IsOptional()
   @IsString()
   referenciaPago?: string;

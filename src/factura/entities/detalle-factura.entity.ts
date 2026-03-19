@@ -47,4 +47,10 @@ export class DetalleFactura {
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   total: number;
+
+  @Column({ name: 'porcentaje_inc', type: 'decimal', precision: 5, scale: 2, nullable: true })
+  porcentajeInc?: number;
+
+  @Column({ name: 'monto_inc', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  montoInc: number;
 }

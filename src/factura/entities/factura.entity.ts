@@ -62,6 +62,18 @@ export class Factura {
   @Column({ name: 'monto_iva', type: 'decimal', precision: 12, scale: 2 })
   montoIva: number;
 
+  @Column({
+    name: 'porcentaje_inc',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+  })
+  porcentajeInc?: number;
+
+  @Column({ name: 'monto_inc', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  montoInc: number;
+
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   total: number;
 
@@ -104,4 +116,10 @@ export class Factura {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @Column({ name: 'deleted_at', nullable: true })
+  deletedAt?: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy?: number;
 }

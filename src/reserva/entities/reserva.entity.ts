@@ -73,6 +73,12 @@ export class Reserva {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
+  @Column({ name: 'deleted_at', nullable: true })
+  deletedAt?: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy?: number;
+
   @ManyToOne(() => Habitacion, { eager: true, nullable: true })
   @JoinColumn({ name: 'id_habitacion' })
   habitacion: Habitacion;

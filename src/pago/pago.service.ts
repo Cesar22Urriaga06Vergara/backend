@@ -21,7 +21,12 @@ export class PagoService {
 
   /**
    * Registrar un pago para una factura
-   * Valida que el medio de pago exista y que si requiere referencia, sea proporcionada
+   * Valida:
+   *  - Que la factura exista y no esté anulada
+   *  - Que el medio de pago exista
+   *  - Que si requiere referencia, sea proporcionada
+   *  - Si es efectivo: que montoRecibido >= monto (cambio no negativo)
+   *  - Que el monto pagado + pagos anteriores no exceda el total de la factura
    * Recalcula el estado de la factura basado en el total pagado
    */
   async registrarPago(
@@ -50,30 +55,63 @@ export class PagoService {
       );
     }
 
+    // Validar que no se pague más del total de la factura
+    const pagosCompletados = await this.pagoRepository.find({
+      where: { idFactura: dto.idFactura, estado: 'completado' },
+    });
+
+    const totalPagoPrevio = pagosCompletados.reduce(
+      (sum, p) => sum + Number(p.monto),
+      0,
+    );
+
+    const totalPagoNuevo = totalPagoPrevio + dto.monto;
+    const totalFactura = Number(factura.total);
+
+    if (totalPagoNuevo > totalFactura) {
+      throw new BadRequestException(
+        `El monto especificado ($${dto.monto}) sumado a pagos previos ($${totalPagoPrevio}) excede el total de la factura ($${totalFactura}). Máximo permitido: $${totalFactura - totalPagoPrevio}`,
+      );
+    }
+
+    // Validaciones específicas para efectivo
+    let cambioDevuelto = 0;
+    if (medioPago.nombre === 'efectivo') {
+      if (!dto.montoRecibido || dto.montoRecibido < 0) {
+        throw new BadRequestException(
+          'Para pagos en efectivo, debe especificar el monto recibido',
+        );
+      }
+
+      if (dto.montoRecibido < dto.monto) {
+        throw new BadRequestException(
+          `Efectivo insuficiente. Total: $${dto.monto}, Recibido: $${dto.montoRecibido}`,
+        );
+      }
+
+      cambioDevuelto = Number((dto.montoRecibido - dto.monto).toFixed(2));
+    }
+
     // Crear y guardar el pago
     const pagoBd = await this.pagoRepository.save({
       idFactura: dto.idFactura,
       idMedioPago: dto.idMedioPago,
       monto: dto.monto,
+      montoRecibido: dto.montoRecibido || null,
+      cambioDevuelto,
       referenciaPago: dto.referenciaPago || null,
       idEmpleadoRegistro: idEmpleado || null,
       estado: 'completado',
       observaciones: dto.observaciones || null,
     } as any);
 
-    // Recalcular estado de la factura
-    const pagosCompletados = await this.pagoRepository.find({
-      where: { idFactura: dto.idFactura, estado: 'completado' },
-    });
-
-    const totalPagado = pagosCompletados.reduce(
-      (sum, p) => sum + Number(p.monto),
-      0,
-    );
-
-    // Si el total pagado >= factura.total, marcar como pagada (si no estaba ya)
-    if (totalPagado >= Number(factura.total) && factura.estado !== 'pagada') {
+    // Recalcular y actualizar estado de la factura según total pagado
+    if (totalPagoNuevo >= totalFactura && factura.estado !== 'pagada') {
       factura.estado = 'pagada';
+      await this.facturaService['facturaRepository'].save(factura);
+    } else if (totalPagoNuevo > 0 && totalPagoNuevo < totalFactura && factura.estado !== 'parcialmente_pagada') {
+      // Nuevo: Estado de pago intermedio cuando hay pago parcial
+      factura.estado = 'parcialmente_pagada';
       await this.facturaService['facturaRepository'].save(factura);
     }
 

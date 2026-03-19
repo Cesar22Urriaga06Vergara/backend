@@ -104,6 +104,21 @@ export class ReservaController {
   @ApiResponse({ status: 409, description: 'No hay disponibilidad' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
   async create(@Body() createReservaDto: CreateReservaDto, @Request() req): Promise<Reserva> {
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+
+    // Validar que admin/recepcionista estén asignados a un hotel
+    if ((userRole === 'admin' || userRole === 'recepcionista') && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Validar que admin/recepcionista creen reservas solo en su hotel
+    if ((userRole === 'admin' || userRole === 'recepcionista') && createReservaDto.idHotel !== userIdHotel) {
+      throw new ForbiddenException(
+        `No tienes permiso para crear reservas en el hotel ${createReservaDto.idHotel}. Solo en tu hotel ${userIdHotel}`,
+      );
+    }
+
     // Obtener el idCliente del usuario autenticado (del JWT)
     createReservaDto.idCliente = req.user.idCliente;
     return await this.reservaService.create(createReservaDto);
@@ -122,6 +137,38 @@ export class ReservaController {
     @Param('codigoConfirmacion') codigoConfirmacion: string,
   ): Promise<Reserva> {
     return await this.reservaService.findByCodigoConfirmacion(codigoConfirmacion);
+  }
+
+  /**
+   * GET /reservas/cliente/:idCliente
+   * Obtener todas las reservas de un cliente (PROTEGIDA)
+   * - Cliente solo puede ver sus propias reservas
+   * - Recepcionista puede ver reservas de clientes de su hotel
+   * - Admin/Superadmin puede ver todas
+   */
+  @Get('activa/:idCliente')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('cliente', 'recepcionista', 'admin', 'superadmin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener reserva activa de un cliente' })
+  @ApiParam({ name: 'idCliente', type: Number })
+  @ApiResponse({ status: 200, description: 'Reserva activa encontrada' })
+  @ApiResponse({ status: 404, description: 'Sin reserva activa' })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  @ApiResponse({ status: 403, description: 'Acceso denegado' })
+  async findReservaActiva(
+    @Param('idCliente', ParseIntPipe) idCliente: number,
+    @Request() req,
+  ): Promise<Reserva | null> {
+    const userRole = req.user.rol;
+    const userIdCliente = req.user.idCliente;
+
+    // Validar permisos — solo el cliente puede acceder
+    if (userRole === 'cliente' && userIdCliente !== idCliente) {
+      throw new ForbiddenException('No puedes ver las reservas de otros clientes');
+    }
+
+    return await this.reservaService.findReservaActivaByCliente(idCliente);
   }
 
   /**
@@ -440,11 +487,11 @@ export class ReservaController {
   /**
    * POST /reservas/:id/checkin
    * Confirmar check-in (PROTEGIDA)
-   * - Solo Recepcionista/Admin/Superadmin
+   * - Solo Recepcionista
    */
   @Post(':id/checkin')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'admin', 'superadmin')
+  @Roles('recepcionista')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Confirmar check-in' })
   @ApiParam({ name: 'id', type: Number })
@@ -480,11 +527,11 @@ export class ReservaController {
   /**
    * POST /reservas/:id/checkout
    * Confirmar check-out (PROTEGIDA)
-   * - Solo Recepcionista/Admin/Superadmin
+   * - Solo Recepcionista
    */
   @Post(':id/checkout')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'admin', 'superadmin')
+  @Roles('recepcionista')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Confirmar check-out' })
   @ApiParam({ name: 'id', type: Number })

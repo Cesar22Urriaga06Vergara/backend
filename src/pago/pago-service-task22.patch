@@ -1,0 +1,15 @@
+// TASK 2.2: ACTUALIZAR ESTADO CON PARCIALMENTE_PAGADA
+// Ubicacion: REEMPLAZAR LINEAS 113-117 en pago.service.ts
+// Transicion de estados: pendiente -> parcialmente_pagada -> pagada
+
+    if (totalPagoNuevo >= totalFactura) {
+      factura.estado = 'pagada';
+      console.log(`[PAGO] Factura ${factura.numeroFactura} PAGADA`);
+    } else if (totalPagoNuevo > 0 && totalPagoNuevo < totalFactura) {
+      factura.estado = 'parcialmente_pagada';
+      const pendiente = Number((totalFactura - totalPagoNuevo).toFixed(2));
+      console.log(`[PAGO] Factura ${factura.numeroFactura} PARCIALMENTE PAGADA: $${totalPagoNuevo}/$${totalFactura}`);
+    }
+    // Si totalPagoNuevo = 0, mantiene estado pendiente
+    
+    await this.facturaService['facturaRepository'].save(factura);

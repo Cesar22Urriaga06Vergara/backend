@@ -17,6 +17,7 @@ import { ReservaService } from '../reserva/reserva.service';
 import { Reserva } from '../reserva/entities/reserva.entity';
 import { Pedido } from '../servicio/entities/pedido.entity';
 import { PedidoItem } from '../servicio/entities/pedido-item.entity';
+import { Servicio } from '../servicio/entities/servicio.entity';
 
 @Injectable()
 export class FacturaService {
@@ -29,6 +30,8 @@ export class FacturaService {
     private pedidoRepository: Repository<Pedido>,
     @InjectRepository(PedidoItem)
     private pedidoItemRepository: Repository<PedidoItem>,
+    @InjectRepository(Servicio)
+    private servicioRepository: Repository<Servicio>,
     private dataSource: DataSource,
     @Inject(forwardRef(() => ReservaService))
     private reservaService: ReservaService,
@@ -59,8 +62,11 @@ export class FacturaService {
    *  - Línea de habitación (noches * precio/noche)
    *  - Líneas de servicios entregados (items de pedidos entregados)
    * Retorna la factura con detalles y cálculos de IVA
+   * 
+   * @param reserva - Reserva completada
+   * @param existingQueryRunner - QueryRunner existente para evitar transacciones anidadas (opcional)
    */
-  async generarDesdeReserva(reserva: Reserva): Promise<Factura> {
+  async generarDesdeReserva(reserva: Reserva, existingQueryRunner?: any): Promise<Factura> {
     // Validar que no exista ya una factura para esta reserva
     const facturaExistente = await this.facturaRepository.findOne({
       where: { idReserva: reserva.id },
@@ -72,10 +78,14 @@ export class FacturaService {
       );
     }
 
-    // Iniciar transacción para garantizar integridad del número secuencial
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    // Usar queryRunner existente o crear uno nuevo
+    const queryRunner = existingQueryRunner || this.dataSource.createQueryRunner();
+    const debeIniciarTransaccion = !existingQueryRunner; // Solo iniciar si es nuestro queryRunner
+
+    if (debeIniciarTransaccion) {
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+    }
 
     try {
       // Generar número de factura dentro de la transacción
@@ -109,7 +119,7 @@ export class FacturaService {
         idReferencia: reserva.idHabitacion,
       });
 
-      // 2. Líneas por servicios entregados
+      // 2. Líneas por servicios entregados (con INC para alcohólicos)
       const pedidosEntregados = await this.pedidoRepository.find({
         where: {
           idReserva: reserva.id,
@@ -118,29 +128,53 @@ export class FacturaService {
         relations: ['items'],
       });
 
+      // Cargar información de servicios para detectar alcohólicos
+      const idsServicios = new Set<number>();
+      for (const pedido of pedidosEntregados) {
+        for (const item of pedido.items) {
+          idsServicios.add(item.idServicio);
+        }
+      }
+
+      const serviciosMap = new Map<number, Servicio>();
+      if (idsServicios.size > 0) {
+        const servicios = await this.servicioRepository.findByIds(Array.from(idsServicios));
+        servicios.forEach(s => serviciosMap.set(s.id, s));
+      }
+
+      // Procesar items con detección de INC
       for (const pedido of pedidosEntregados) {
         for (const item of pedido.items) {
           const subtotalServicio =
             Number(item.cantidad) * Number(item.precioUnitarioSnapshot);
+          
+          const servicio = serviciosMap.get(item.idServicio);
+          const esAlcoholico = servicio?.esAlcoholico || false;
+          const porcentajeInc = esAlcoholico ? 8 : undefined; // INC 8% solo para alcohólicos
+          const montoInc = esAlcoholico ? (subtotalServicio * 0.08) : 0;
 
           detalles.push({
-            tipoConcepto: 'servicio',
+            tipoConcepto: esAlcoholico ? 'servicio_alcoholico' : 'servicio',
             descripcion: `${item.nombreServicioSnapshot} (${new Date(pedido.fechaPedido).toLocaleDateString('es-CO')})`,
             cantidad: item.cantidad,
             precioUnitario: Number(item.precioUnitarioSnapshot),
             subtotal: subtotalServicio,
             descuento: 0,
             total: subtotalServicio,
+            porcentajeInc,
+            montoInc,
             idReferencia: item.id,
           });
         }
       }
 
-      // 3. Calcular totales
+      // 3. Calcular totales (subtotal + INC + IVA)
       const subtotal = detalles.reduce((sum, d) => sum + Number(d.total), 0);
+      const montoInc = detalles.reduce((sum, d) => sum + (d.montoInc || 0), 0);
+      const subtotalConInc = subtotal + montoInc; // Base gravable para IVA
       const porcentajeIva = 19; // IVA estándar Colombia
-      const montoIva = subtotal * (porcentajeIva / 100);
-      const total = subtotal + montoIva;
+      const montoIva = subtotalConInc * (porcentajeIva / 100);
+      const total = subtotalConInc + montoIva;
 
       // 4. Crear factura
       const factura = new Factura();
@@ -153,6 +187,8 @@ export class FacturaService {
       factura.emailCliente = reserva.emailCliente;
       factura.idHotel = reserva.idHotel;
       factura.subtotal = subtotal;
+      factura.montoInc = montoInc;
+      factura.porcentajeInc = montoInc > 0 ? 8 : undefined; // 8% INC si hay items alcohólicos
       factura.porcentajeIva = porcentajeIva;
       factura.montoIva = montoIva;
       factura.total = total;
@@ -170,7 +206,14 @@ export class FacturaService {
           email: reserva.emailCliente,
         },
         detalles,
-        montos: { subtotal, porcentajeIva, montoIva, total },
+        montos: { 
+          subtotal, 
+          montoInc,
+          porcentajeIncAplicado: montoInc > 0 ? 8 : null,
+          porcentajeIva, 
+          montoIva, 
+          total 
+        },
         fechaEmision: new Date().toISOString(),
       });
       
@@ -193,14 +236,23 @@ export class FacturaService {
         relations: ['detalles'],
       });
 
-      await queryRunner.commitTransaction();
+      // Solo hacer commit si fue nuestra transacción
+      if (debeIniciarTransaccion) {
+        await queryRunner.commitTransaction();
+      }
 
       return facturaCompleta || new Factura();
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      // Solo hacer rollback si fue nuestra transacción
+      if (debeIniciarTransaccion) {
+        await queryRunner.rollbackTransaction();
+      }
       throw error;
     } finally {
-      await queryRunner.release();
+      // Solo liberar si fue nuestro queryRunner
+      if (debeIniciarTransaccion) {
+        await queryRunner.release();
+      }
     }
   }
 
@@ -288,6 +340,20 @@ export class FacturaService {
   }
 
   /**
+   * Obtener todas las facturas de un cliente filtradas por hotel
+   */
+  async findByClienteAndHotel(
+    idCliente: number,
+    idHotel: number,
+  ): Promise<Factura[]> {
+    return this.facturaRepository.find({
+      where: { idCliente, idHotel },
+      relations: ['detalles', 'pagos', 'reserva'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  /**
    * Emitir factura (cambiar estado a 'emitida')
    */
   async emitir(id: number): Promise<Factura> {
@@ -362,19 +428,23 @@ export class FacturaService {
     const fecha = new Date().toISOString().split('T')[0];
     const hora = new Date().toISOString().split('T')[1].split('.')[0];
 
+    // Formatear número de factura con serie
+    const seriePrefix = 'FV'; // FV = Factura de Venta
+    const numeroFormateado = `${seriePrefix}-${String(numeroFactura).padStart(8, '0')}`;
+
     const detallesXml = detalles
       .map(
         (d, idx) => `
     <cac:InvoiceLine>
       <cbc:ID>${idx + 1}</cbc:ID>
       <cbc:InvoicedQuantity unitCode="EA">${d.cantidad}</cbc:InvoicedQuantity>
+      <cbc:LineExtensionAmount currencyID="COP">${Number(d.total).toFixed(2)}</cbc:LineExtensionAmount>
       <cac:Item>
-        <cbc:Description>${d.descripcion}</cbc:Description>
+        <cbc:Description>${d.descripcion || 'Servicio de hospedaje'}</cbc:Description>
       </cac:Item>
       <cac:Price>
         <cbc:PriceAmount currencyID="COP">${Number(d.precioUnitario).toFixed(2)}</cbc:PriceAmount>
       </cac:Price>
-      <cac:LineExtensionAmount currencyID="COP">${Number(d.total).toFixed(2)}</cac:LineExtensionAmount>
     </cac:InvoiceLine>`,
       )
       .join('\n');
@@ -382,21 +452,31 @@ export class FacturaService {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2"
          xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"
+         xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2"
          xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2">
+  <!-- METADATOS DIAN -->
   <cbc:UBLVersionID>2.1</cbc:UBLVersionID>
   <cbc:CustomizationID>05</cbc:CustomizationID>
+  <cbc:ProfileID>dian</cbc:ProfileID>
+  <cbc:ID>${numeroFormateado}</cbc:ID>
   <cbc:UUID>${uuid}</cbc:UUID>
   <cbc:IssueDate>${fecha}</cbc:IssueDate>
   <cbc:IssueTime>${hora}</cbc:IssueTime>
   <cbc:InvoiceTypeCode listID="DIAN 1.0">01</cbc:InvoiceTypeCode>
   <cbc:DocumentCurrencyCode>COP</cbc:DocumentCurrencyCode>
+  
+  <!-- PERÍODO -->
   <cac:InvoicePeriod>
     <cbc:StartDate>${fecha}</cbc:StartDate>
     <cbc:EndDate>${fecha}</cbc:EndDate>
   </cac:InvoicePeriod>
+  
+  <!-- REFERENCIA A ORDEN -->
   <cac:OrderReference>
-    <cbc:ID>${numeroFactura}</cbc:ID>
+    <cbc:ID>${numeroFormateado}</cbc:ID>
   </cac:OrderReference>
+  
+  <!-- PROVEEDOR (Hotel Sena) -->
   <cac:AccountingSupplierParty>
     <cac:Party>
       <cbc:Name>HOTEL SENA 2026</cbc:Name>
@@ -412,47 +492,65 @@ export class FacturaService {
         </cac:Country>
       </cac:PostalAddress>
       <cac:PartyTaxScheme>
+        <cbc:RegistrationName>HOTEL SENA 2026</cbc:RegistrationName>
+        <cbc:CompanyID schemeID="NIT">9001234567-1</cbc:CompanyID>
         <cbc:TaxTypeCode>01</cbc:TaxTypeCode>
         <cac:TaxScheme>
           <cbc:ID>01</cbc:ID>
+          <cbc:Name>IVA</cbc:Name>
         </cac:TaxScheme>
       </cac:PartyTaxScheme>
     </cac:Party>
   </cac:AccountingSupplierParty>
+  
+  <!-- CLIENTE (Huésped) -->
   <cac:AccountingCustomerParty>
     <cac:Party>
       <cbc:Name>${reserva.nombreCliente}</cbc:Name>
       <cac:PartyIdentification>
-        <cbc:ID>${reserva.cedulaCliente}</cbc:ID>
+        <cbc:ID schemeID="CC">${reserva.cedulaCliente}</cbc:ID>
       </cac:PartyIdentification>
       <cac:Contact>
         <cbc:ElectronicMail>${reserva.emailCliente}</cbc:ElectronicMail>
       </cac:Contact>
     </cac:Party>
   </cac:AccountingCustomerParty>
+  
+  <!-- TOTALES IMPUESTOS -->
   <cac:TaxTotal>
     <cbc:TaxAmount currencyID="COP">${Number(montos.montoIva).toFixed(2)}</cbc:TaxAmount>
     <cac:TaxSubtotal>
       <cbc:TaxableAmount currencyID="COP">${Number(montos.subtotal).toFixed(2)}</cbc:TaxableAmount>
       <cbc:TaxAmount currencyID="COP">${Number(montos.montoIva).toFixed(2)}</cbc:TaxAmount>
+      <cbc:CalculationSequenceNumeric>1</cbc:CalculationSequenceNumeric>
       <cac:TaxCategory>
         <cbc:ID>S</cbc:ID>
+        <cbc:Name>IVA</cbc:Name>
         <cbc:Percent>${montos.porcentajeIva}</cbc:Percent>
+        <cbc:TaxExemptionReasonCode>VAT_EXEMPT</cbc:TaxExemptionReasonCode>
         <cac:TaxScheme>
           <cbc:ID>01</cbc:ID>
+          <cbc:Name>IVA</cbc:Name>
         </cac:TaxScheme>
       </cac:TaxCategory>
     </cac:TaxSubtotal>
   </cac:TaxTotal>
+  
+  <!-- TOTALES MONETARIOS -->
   <cac:LegalMonetaryTotal>
     <cbc:LineExtensionAmount currencyID="COP">${Number(montos.subtotal).toFixed(2)}</cbc:LineExtensionAmount>
     <cbc:TaxExclusiveAmount currencyID="COP">${Number(montos.subtotal).toFixed(2)}</cbc:TaxExclusiveAmount>
     <cbc:TaxInclusiveAmount currencyID="COP">${Number(montos.total).toFixed(2)}</cbc:TaxInclusiveAmount>
+    <cbc:PrepaidAmount currencyID="COP">0.00</cbc:PrepaidAmount>
     <cbc:PayableAmount currencyID="COP">${Number(montos.total).toFixed(2)}</cbc:PayableAmount>
   </cac:LegalMonetaryTotal>
+  
+  <!-- LÍNEAS DE FACTURA -->
   ${detallesXml}
-  <!-- AVISO: Documento generado electrónicamente -->
-  <!-- Simulación para preparación DIAN - No válido fiscalmente sin firma digital -->
+  
+  <!-- NOTAS -->
+  <cbc:Note>Documento generado electrónicamente según resolución DIAN</cbc:Note>
+  <cbc:Note>⚠️ DOCUMENTO SIMULADO - No es válido fiscalmente sin Firma Digital XMLDSIG y certificado DIAN</cbc:Note>
 </Invoice>`;
   }
 }

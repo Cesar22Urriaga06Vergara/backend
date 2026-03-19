@@ -45,6 +45,9 @@ export class Servicio {
   @Column({ name: 'disponible_recogida', default: true })
   disponibleRecogida: boolean;
 
+  @Column({ name: 'es_alcoholico', default: false })
+  esAlcoholico: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

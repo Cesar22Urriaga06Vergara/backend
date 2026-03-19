@@ -12,6 +12,9 @@ import {
   UseInterceptors,
   UploadedFiles,
   BadRequestException,
+  Request,
+  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -29,6 +32,8 @@ import { HabitacionService } from './habitacion.service';
 import { CreateHabitacionDto } from './dto/create-habitacion.dto';
 import { UpdateHabitacionDto } from './dto/update-habitacion.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('Habitaciones')
 @Controller('habitaciones')
@@ -40,14 +45,34 @@ export class HabitacionController {
    * Crear una nueva habitación (sin imágenes)
    */
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear una nueva habitación' })
   @ApiBody({ type: CreateHabitacionDto })
   @ApiResponse({ status: 201, description: 'Habitación creada exitosamente' })
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  create(@Body() createHabitacionDto: CreateHabitacionDto) {
+  @ApiResponse({ status: 403, description: 'Solo admin/superadmin pueden crear habitaciones' })
+  create(
+    @Body() createHabitacionDto: CreateHabitacionDto,
+    @Request() req: any,
+  ) {
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+
+    // Admin debe estar asignado a un hotel
+    if (userRole === 'admin' && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Admin solo puede crear habitaciones en su hotel
+    if (userRole === 'admin' && createHabitacionDto.idHotel !== userIdHotel) {
+      throw new ForbiddenException(
+        `No tienes permiso para crear habitaciones en el hotel ${createHabitacionDto.idHotel}. Solo en tu hotel ${userIdHotel}`,
+      );
+    }
+
     return this.habitacionService.create(createHabitacionDto);
   }
 
@@ -96,7 +121,8 @@ export class HabitacionController {
    * Actualizar una habitación
    */
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar una habitación' })
   @ApiParam({ name: 'id', type: Number, description: 'ID de la habitación' })
@@ -105,10 +131,34 @@ export class HabitacionController {
   @ApiResponse({ status: 404, description: 'Habitación no encontrada' })
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  update(
+  @ApiResponse({ status: 403, description: 'Solo admin/superadmin pueden actualizar habitaciones' })
+  async update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateHabitacionDto: UpdateHabitacionDto,
+    @Request() req: any,
   ) {
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+
+    // Admin debe estar asignado a un hotel
+    if (userRole === 'admin' && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Para admin, validar que la habitación pertenezca a su hotel
+    if (userRole === 'admin') {
+      const habitacion = await this.habitacionService.findOne(id);
+      if (!habitacion) {
+        throw new NotFoundException('Habitación no encontrada');
+      }
+
+      if (habitacion.idHotel !== userIdHotel) {
+        throw new ForbiddenException(
+          'No tienes permiso para actualizar habitaciones de otro hotel',
+        );
+      }
+    }
+
     return this.habitacionService.update(id, updateHabitacionDto);
   }
 
@@ -117,7 +167,8 @@ export class HabitacionController {
    * Subir/actualizar imágenes de una habitación
    */
   @Patch(':id/imagenes')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'superadmin')
   @ApiBearerAuth()
   @UseInterceptors(FilesInterceptor('imagenes', 5, { storage: memoryStorage() }))
   @ApiConsumes('multipart/form-data')
@@ -140,10 +191,34 @@ export class HabitacionController {
   @ApiResponse({ status: 400, description: 'Datos inválidos o archivo no válido' })
   @ApiResponse({ status: 404, description: 'Habitación no encontrada' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  uploadImages(
+  @ApiResponse({ status: 403, description: 'Solo admin/superadmin pueden subir imágenes' })
+  async uploadImages(
     @Param('id', ParseIntPipe) id: number,
     @UploadedFiles() files?: Express.Multer.File[],
+    @Request() req?: any,
   ) {
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+
+    // Admin debe estar asignado a un hotel
+    if (userRole === 'admin' && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Para admin, validar que la habitación pertenezca a su hotel
+    if (userRole === 'admin') {
+      const habitacion = await this.habitacionService.findOne(id);
+      if (!habitacion) {
+        throw new NotFoundException('Habitación no encontrada');
+      }
+
+      if (habitacion.idHotel !== userIdHotel) {
+        throw new ForbiddenException(
+          'No tienes permiso para actualizar imágenes de habitaciones de otro hotel',
+        );
+      }
+    }
+
     // Validar que se proporcionaron archivos
     if (!files || files.length === 0) {
       throw new BadRequestException('Debes proporcionar al menos una imagen');
@@ -167,14 +242,41 @@ export class HabitacionController {
    * Eliminar una habitación
    */
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Eliminar una habitación' })
   @ApiParam({ name: 'id', type: Number, description: 'ID de la habitación' })
   @ApiResponse({ status: 200, description: 'Habitación eliminada exitosamente' })
   @ApiResponse({ status: 404, description: 'Habitación no encontrada' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
-  remove(@Param('id', ParseIntPipe) id: number) {
+  @ApiResponse({ status: 403, description: 'Solo admin/superadmin pueden eliminar habitaciones' })
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+  ) {
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+
+    // Admin debe estar asignado a un hotel
+    if (userRole === 'admin' && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Para admin, validar que la habitación pertenezca a su hotel
+    if (userRole === 'admin') {
+      const habitacion = await this.habitacionService.findOne(id);
+      if (!habitacion) {
+        throw new NotFoundException('Habitación no encontrada');
+      }
+
+      if (habitacion.idHotel !== userIdHotel) {
+        throw new ForbiddenException(
+          'No tienes permiso para eliminar habitaciones de otro hotel',
+        );
+      }
+    }
+
     return this.habitacionService.remove(id);
   }
 }

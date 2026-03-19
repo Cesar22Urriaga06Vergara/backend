@@ -31,6 +31,14 @@ export class Pago {
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   monto: number;
 
+  // Monto recibido en efectivo (solo para medio_pago = 'efectivo')
+  @Column({ name: 'monto_recibido', type: 'decimal', precision: 12, scale: 2, nullable: true })
+  montoRecibido?: number;
+
+  // Cambio devuelto = montoRecibido - monto
+  @Column({ name: 'cambio_devuelto', type: 'decimal', precision: 12, scale: 2, default: 0 })
+  cambioDevuelto: number;
+
   // Número de aprobación, referencia bancaria, nro. transacción, etc.
   @Column({ name: 'referencia_pago', nullable: true })
   referenciaPago: string;
@@ -48,4 +56,10 @@ export class Pago {
 
   @CreateDateColumn({ name: 'fecha_pago' })
   fechaPago: Date;
+
+  @Column({ name: 'deleted_at', nullable: true })
+  deletedAt?: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy?: number;
 }

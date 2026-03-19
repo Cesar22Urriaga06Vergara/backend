@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -16,6 +16,9 @@ import { ServicioModule } from './servicio/servicio.module';
 import { FacturaModule } from './factura/factura.module';
 import { MedioPagoModule } from './medio-pago/medio-pago.module';
 import { PagoModule } from './pago/pago.module';
+import { CommonModule } from './common/common.module';
+import { IncidenciaModule } from './incidencia/incidencia.module';
+import { AdminAccessMiddleware } from './common/middleware/admin-access.middleware';
 
 @Module({
   imports: [
@@ -49,6 +52,8 @@ import { PagoModule } from './pago/pago.module';
     CloudinaryModule,
 
     // Módulos de la aplicación
+    CommonModule,
+    IncidenciaModule,
     AmenidadModule,
     HotelModule,
     TipoHabitacionModule,
@@ -65,4 +70,17 @@ import { PagoModule } from './pago/pago.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(AdminAccessMiddleware).forRoutes(
+      '/users',
+      '/usuarios',
+      '/habitaciones',
+      '/empleados',
+      '/hoteles',
+      '/amenidades',
+      '/medios-pago',
+      '/tipos-habitacion',
+    );
+  }
+}

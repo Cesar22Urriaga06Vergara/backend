@@ -8,9 +8,15 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
   Req,
   HttpCode,
   HttpStatus,
+  ParseIntPipe,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+  Request,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -26,6 +32,10 @@ import { CreateServicioDto } from './dto/create-servicio.dto';
 import { UpdateServicioDto } from './dto/update-servicio.dto';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
 import { UpdateEstadoPedidoDto } from './dto/update-estado-pedido.dto';
+import { AreaAuditInterceptor } from './interceptors/area-audit.interceptor';
+import { PedidoAreaResponseDto } from './dto/pedido-area-response.dto';
+import { PedidoAreaReporteDto, AreaReportsResumenDto } from './dto/pedido-area-reporte.dto';
+import { HotelReportConsolidadoDto } from './dto/hotel-reporte-consolidado.dto';
 
 @ApiTags('Servicios')
 @Controller('servicios')
@@ -130,18 +140,95 @@ export class ServicioController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('cafeteria', 'lavanderia', 'spa', 'room_service', 'admin', 'superadmin')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Obtener pedidos del área (Empleado de área)' })
-  @ApiResponse({ status: 200, description: 'Pedidos del área' })
+  @ApiOperation({ 
+    summary: 'Obtener pedidos operacionales del área (sin datos financieros)' 
+  })
+  @ApiResponse({ status: 200, description: 'Pedidos operacionales del área', type: [PedidoAreaResponseDto] })
   async obtenerPedidosArea(
     @Param('idHotel') idHotel: number,
     @Param('categoria') categoria: string,
     @Query('estado') estado?: string,
-  ) {
-    return await this.servicioService.obtenerPedidosPorCategoria(
+  ): Promise<PedidoAreaResponseDto[]> {
+    return await this.servicioService.obtenerPedidosAreaOperacional(
       idHotel,
       categoria,
       estado,
     );
+  }
+
+  @Get('reportes/area/:idHotel/:categoria')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseInterceptors(AreaAuditInterceptor)
+  @Roles('cafeteria', 'lavanderia', 'spa', 'room_service', 'admin', 'superadmin')
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'Obtener reporte financiero del área (AUDITADO - con datos sensibles)' 
+  })
+  @ApiResponse({ status: 200, description: 'Reporte financiero auditado' })
+  async obtenerReporteArea(
+    @Param('idHotel') idHotel: number,
+    @Param('categoria') categoria: string,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+    @Req() req?: any,
+  ) {
+    // Parsear fechas si se proporcionan
+    const fechaDesde = desde ? new Date(desde) : undefined;
+    const fechaHasta = hasta ? new Date(hasta) : undefined;
+
+    const reporte = await this.servicioService.obtenerReporteArea(
+      idHotel,
+      categoria,
+      fechaDesde,
+      fechaHasta,
+    );
+
+    // Enriquecer información de auditoría
+    if (reporte.resumen && req?.user) {
+      reporte.resumen.consultadoPor = {
+        idEmpleado: req.user.idEmpleado,
+        rol: req.user.rol,
+      };
+    }
+
+    return reporte;
+  }
+
+  @Get('reportes/hotel/:idHotel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseInterceptors(AreaAuditInterceptor)
+  @Roles('admin', 'superadmin')
+  @ApiBearerAuth()
+  @ApiOperation({ 
+    summary: 'Obtener reporte CONSOLIDADO del hotel (todas las áreas) - ADMIN' 
+  })
+  @ApiResponse({ status: 200, description: 'Reporte consolidado del hotel', type: HotelReportConsolidadoDto })
+  async obtenerReporteHotelConsolidado(
+    @Param('idHotel') idHotel: number,
+    @Query('desde') desde?: string,
+    @Query('hasta') hasta?: string,
+    @Req() req?: any,
+  ): Promise<HotelReportConsolidadoDto> {
+    // Parsear fechas
+    const fechaDesde = desde ? new Date(desde) : undefined;
+    const fechaHasta = hasta ? new Date(hasta) : undefined;
+
+    const reporte = await this.servicioService.obtenerReporteHotelConsolidado(
+      idHotel,
+      fechaDesde,
+      fechaHasta,
+    );
+
+    // Enriquecer auditoría
+    if (req?.user) {
+      reporte.consultadoPor = {
+        idEmpleado: req.user.idEmpleado,
+        idAdmin: req.user.idAdmin,
+        rol: req.user.rol,
+      };
+    }
+
+    return reporte;
   }
 
   @Get('pedidos/:id')
@@ -149,8 +236,54 @@ export class ServicioController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener detalle de pedido' })
   @ApiResponse({ status: 200, description: 'Detalle del pedido' })
-  async obtenerPedido(@Param('id') id: number) {
-    return await this.servicioService.obtenerPedido(id);
+  async obtenerPedido(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+  ) {
+    const pedido = await this.servicioService.obtenerPedido(id);
+
+    if (!pedido) {
+      throw new NotFoundException('Pedido no encontrado');
+    }
+
+    const userRole = req.user.rol;
+    const userIdCliente = req.user.idCliente;
+    const userIdHotel = req.user.idHotel;
+    const userIdEmpleado = req.user.idEmpleado;
+
+    // Cliente: solo puede ver sus propios pedidos
+    if (userRole === 'cliente' && pedido.idCliente !== userIdCliente) {
+      throw new ForbiddenException('No tienes autorización para ver este pedido');
+    }
+
+    // Empleados de área: solo pedidos de su hotel
+    if (
+      ['cafeteria', 'lavanderia', 'spa', 'room_service'].includes(userRole) &&
+      pedido.idHotel !== userIdHotel
+    ) {
+      throw new ForbiddenException(
+        'No tienes autorización para ver pedidos de otro hotel',
+      );
+    }
+
+    // Recepcionista/Admin: solo pedidos de su hotel
+    if (
+      (userRole === 'recepcionista' || userRole === 'admin') &&
+      !userIdHotel
+    ) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    if (
+      (userRole === 'recepcionista' || userRole === 'admin') &&
+      pedido.idHotel !== userIdHotel
+    ) {
+      throw new ForbiddenException(
+        'No tienes autorización para ver pedidos de otro hotel',
+      );
+    }
+
+    return pedido;
   }
 
   @Patch('pedidos/:id/estado')

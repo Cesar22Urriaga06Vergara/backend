@@ -42,4 +42,10 @@ export class Empleado {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @Column({ name: 'deleted_at', nullable: true })
+  deletedAt?: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy?: number;
 }

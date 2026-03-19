@@ -9,6 +9,9 @@ import {
   UseGuards,
   Query,
   BadRequestException,
+  Request,
+  ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -56,6 +59,8 @@ export class FacturaController {
   /**
    * GET /facturas
    * Obtener todas las facturas con filtros
+   * Admin solo ve facturas de su hotel
+   * Superadmin ve todas
    */
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -70,7 +75,26 @@ export class FacturaController {
     @Query('idHotel') idHotel?: string,
     @Query('estado') estado?: string,
     @Query('idCliente') idCliente?: string,
+    @Request() req?: any,
   ): Promise<Factura[]> {
+    const userRole = req?.user?.rol;
+    const userIdHotel = req?.user?.idHotel;
+
+    // Validación para admin
+    if (userRole === 'admin') {
+      if (!userIdHotel) {
+        throw new BadRequestException('Usuario debe estar asignado a un hotel');
+      }
+      // Admin solo ve su hotel
+      const filters = {
+        idHotel: userIdHotel,
+        estado,
+        idCliente: idCliente ? Number(idCliente) : undefined,
+      };
+      return this.facturaService.findAll(filters);
+    }
+
+    // Superadmin ve todas
     const filters = {
       idHotel: idHotel ? Number(idHotel) : undefined,
       estado,
@@ -83,6 +107,11 @@ export class FacturaController {
   /**
    * GET /facturas/:id
    * Obtener una factura por ID
+   * 
+   * Validación: 
+   * - Clientes solo pueden ver sus propias facturas
+   * - Admin solo puede ver facturas de su hotel
+   * - Superadmin puede ver cualquier factura
    */
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -91,14 +120,53 @@ export class FacturaController {
   @ApiOperation({ summary: 'Obtener una factura por ID' })
   @ApiParam({ name: 'id', type: Number })
   @ApiResponse({ status: 200, description: 'Factura obtenida exitosamente' })
+  @ApiResponse({ status: 403, description: 'No tiene autorización para acceder a esta factura' })
   @ApiResponse({ status: 404, description: 'Factura no encontrada' })
-  async findOne(@Param('id', ParseIntPipe) id: number): Promise<Factura> {
-    return this.facturaService.findOne(id);
+  async findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+  ): Promise<Factura> {
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+
+    const factura = await this.facturaService.findOne(id);
+
+    // Cliente: solo su propia factura
+    if (userRole === 'cliente' && factura.idCliente !== req.user.idCliente) {
+      throw new ForbiddenException('No tiene autorización para acceder a esta factura');
+    }
+
+    // Admin: validar que está asignado a un hotel
+    if (userRole === 'admin' && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Admin: solo facturas de su hotel
+    if (userRole === 'admin' && factura.idHotel !== userIdHotel) {
+      throw new ForbiddenException('No tiene autorización para acceder a esta factura');
+    }
+
+    // Recepcionista: validar que está asignado a un hotel
+    if (userRole === 'recepcionista' && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Recepcionista: solo facturas de su hotel
+    if (userRole === 'recepcionista' && factura.idHotel !== userIdHotel) {
+      throw new ForbiddenException('No tiene autorización para acceder a esta factura');
+    }
+
+    return factura;
   }
 
   /**
    * GET /facturas/reserva/:idReserva
    * Obtener factura por ID de reserva
+   * 
+   * Validación: 
+   * - Clientes solo pueden ver facturas de sus propias reservas
+   * - Admin solo puede ver facturas de reservas de su hotel
+   * - Superadmin puede ver cualquier factura
    */
   @Get('reserva/:idReserva')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -107,16 +175,53 @@ export class FacturaController {
   @ApiOperation({ summary: 'Obtener factura por ID de reserva' })
   @ApiParam({ name: 'idReserva', type: Number })
   @ApiResponse({ status: 200, description: 'Factura obtenida exitosamente' })
+  @ApiResponse({ status: 403, description: 'No tiene autorización para acceder a esta factura' })
   @ApiResponse({ status: 404, description: 'Factura no encontrada' })
   async findByReserva(
     @Param('idReserva', ParseIntPipe) idReserva: number,
+    @Request() req: any,
   ): Promise<Factura> {
-    return this.facturaService.findByReserva(idReserva);
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+
+    const factura = await this.facturaService.findByReserva(idReserva);
+
+    // Cliente: solo facturas de sus propias reservas
+    if (userRole === 'cliente' && factura.idCliente !== req.user.idCliente) {
+      throw new ForbiddenException('No tiene autorización para acceder a esta factura');
+    }
+
+    // Admin: validar que está asignado a un hotel
+    if (userRole === 'admin' && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Admin: solo facturas de su hotel
+    if (userRole === 'admin' && factura.idHotel !== userIdHotel) {
+      throw new ForbiddenException('No tiene autorización para acceder a esta factura');
+    }
+
+    // Recepcionista: validar que está asignado a un hotel
+    if (userRole === 'recepcionista' && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Recepcionista: solo facturas de su hotel
+    if (userRole === 'recepcionista' && factura.idHotel !== userIdHotel) {
+      throw new ForbiddenException('No tiene autorización para acceder a esta factura');
+    }
+
+    return factura;
   }
 
   /**
    * GET /facturas/cliente/:idCliente
    * Obtener todas las facturas de un cliente
+   * 
+   * Validación: 
+   * - Clientes solo pueden ver sus propias facturas
+   * - Admin solo puede ver facturas de clientes de su hotel
+   * - Superadmin puede ver cualquier factura de cliente
    */
   @Get('cliente/:idCliente')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -125,10 +230,33 @@ export class FacturaController {
   @ApiOperation({ summary: 'Obtener facturas de un cliente' })
   @ApiParam({ name: 'idCliente', type: Number })
   @ApiResponse({ status: 200, description: 'Facturas obtenidas exitosamente' })
+  @ApiResponse({ status: 403, description: 'No tiene autorización para acceder a estas facturas' })
   async findByCliente(
     @Param('idCliente', ParseIntPipe) idCliente: number,
+    @Request() req: any,
   ): Promise<Factura[]> {
-    return this.facturaService.findByCliente(idCliente);
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+
+    // Cliente: solo sus propias facturas
+    if (userRole === 'cliente' && idCliente !== req.user.idCliente) {
+      throw new ForbiddenException(
+        'No tiene autorización para acceder a las facturas de otro cliente',
+      );
+    }
+
+    // Admin: validar que está asignado a un hotel
+    if (userRole === 'admin' && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Superadmin: acceso a todas las facturas del cliente
+    if (userRole === 'superadmin') {
+      return this.facturaService.findByCliente(idCliente);
+    }
+
+    // Admin: solo facturas de su hotel (filtrado en service)
+    return this.facturaService.findByClienteAndHotel(idCliente, userIdHotel);
   }
 
   /**
@@ -143,9 +271,31 @@ export class FacturaController {
   @ApiParam({ name: 'id', type: Number })
   @ApiResponse({ status: 200, description: 'Factura emitida exitosamente' })
   @ApiResponse({ status: 404, description: 'Factura no encontrada' })
-  async emitir(@Param('id', ParseIntPipe) id: number): Promise<Factura> {
+  async emitir(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+  ): Promise<Factura> {
+    // Admin debe estar asignado a un hotel
+    if (req.user.rol === 'admin' && !req.user.idHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Para admins, validar que la factura pertenezca a su hotel
+    if (req.user.rol === 'admin') {
+      const factura = await this.facturaService.findOne(id);
+      if (!factura) {
+        throw new NotFoundException('Factura no encontrada');
+      }
+      if (factura.idHotel !== req.user.idHotel) {
+        throw new ForbiddenException(
+          'No tiene autorización para emitir facturas de otro hotel',
+        );
+      }
+    }
+
     return this.facturaService.emitir(id);
   }
+
 
   /**
    * PATCH /facturas/:id/anular
@@ -162,10 +312,31 @@ export class FacturaController {
   async anular(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { motivo: string },
+    @Request() req: any,
   ): Promise<Factura> {
     if (!body.motivo) {
       throw new BadRequestException('El motivo de anulación es requerido');
     }
+
+    // Admin debe estar asignado a un hotel
+    if (req.user.rol === 'admin' && !req.user.idHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    // Para admins, validar que la factura pertenezca a su hotel
+    if (req.user.rol === 'admin') {
+      const factura = await this.facturaService.findOne(id);
+      if (!factura) {
+        throw new NotFoundException('Factura no encontrada');
+      }
+      if (factura.idHotel !== req.user.idHotel) {
+        throw new ForbiddenException(
+          'No tiene autorización para anular facturas de otro hotel',
+        );
+      }
+    }
+
     return this.facturaService.anular(id, body.motivo);
   }
 }
+

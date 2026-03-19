@@ -9,10 +9,20 @@ import { Servicio } from './entities/servicio.entity';
 import { Pedido } from './entities/pedido.entity';
 import { PedidoItem } from './entities/pedido-item.entity';
 import { Reserva } from '../reserva/entities/reserva.entity';
+import { Cliente } from '../cliente/entities/cliente.entity';
 import { CreateServicioDto } from './dto/create-servicio.dto';
 import { UpdateServicioDto } from './dto/update-servicio.dto';
 import { CreatePedidoDto } from './dto/create-pedido.dto';
 import { UpdateEstadoPedidoDto } from './dto/update-estado-pedido.dto';
+import { PedidoAreaResponseDto } from './dto/pedido-area-response.dto';
+import { PedidoAreaReporteDto, AreaReportsResumenDto } from './dto/pedido-area-reporte.dto';
+import {
+  HotelReportConsolidadoDto,
+  HotelKpisDto,
+  AreaResumenDto,
+  TopAreaDto,
+  EstadisticasEntregaConsolidadoDto,
+} from './dto/hotel-reporte-consolidado.dto';
 
 @Injectable()
 export class ServicioService {
@@ -25,7 +35,23 @@ export class ServicioService {
     private pedidoItemRepository: Repository<PedidoItem>,
     @InjectRepository(Reserva)
     private reservaRepository: Repository<Reserva>,
+    @InjectRepository(Cliente)
+    private clienteRepository: Repository<Cliente>,
   ) {}
+
+  /**
+   * Calcular la edad de un cliente basado en fecha de nacimiento
+   * Task 2.1: Validación de edad para bebidas alcohólicas
+   */
+  private calcularEdad(fechaNacimiento: Date): number {
+    const hoy = new Date();
+    let edad = hoy.getFullYear() - fechaNacimiento.getFullYear();
+    const mesDiferencia = hoy.getMonth() - fechaNacimiento.getMonth();
+    if (mesDiferencia < 0 || (mesDiferencia === 0 && hoy.getDate() < fechaNacimiento.getDate())) {
+      edad--;
+    }
+    return edad;
+  }
 
   // ── MÉTODOS DE SERVICIO (Catálogo) ──
 
@@ -128,6 +154,39 @@ export class ServicioService {
 
     if (servicios.length !== idsServicios.length) {
       throw new BadRequestException('Uno o más servicios no existen');
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // TASK 2.1: VALIDACIÓN DE EDAD PARA BEBIDAS ALCOHÓLICAS
+    // ════════════════════════════════════════════════════════════
+    const tieneAlcoholicos = servicios.some((s) => s.esAlcoholico === true);
+    if (tieneAlcoholicos) {
+      const cliente = await this.clienteRepository.findOne({
+        where: { id: idCliente },
+      });
+
+      if (!cliente) {
+        throw new NotFoundException('Cliente no encontrado');
+      }
+
+      // Validar que tiene fecha de nacimiento registrada
+      if (!cliente.fechaNacimiento) {
+        throw new BadRequestException(
+          'No puedes pedir bebidas alcohólicas sin datos de edad verificada. ' +
+          'Por favor completa tu perfil en "Mi Cuenta".'
+        );
+      }
+
+      // Calcular edad y validar >= 21
+      const edadCliente = this.calcularEdad(cliente.fechaNacimiento);
+      if (edadCliente < 21) {
+        throw new BadRequestException(
+          `⚠️ Restricción de Edad: Debes ser mayor de 21 años para pedir bebidas alcohólicas. ` +
+          `Tu edad actual: ${edadCliente} años.`
+        );
+      }
+
+      console.log(`[PEDIDO] ✅ Validación de edad OK: Cliente ${idCliente} (${edadCliente} años) puede pedir bebidas alcohólicas`);
     }
 
     // Validar que todos los servicios son del mismo hotel y categoría
@@ -449,4 +508,518 @@ export class ServicioService {
       tasaEntrega: parseFloat(tasaEntrega),
     };
   }
+
+  // ──────────────────────────────────────────────────────────────
+  // ── MÉTODOS SAAS - SEGREGACIÓN DE VISTAS PARA ÁREAS ──
+  // ──────────────────────────────────────────────────────────────
+
+  /**
+   * Mapea Pedidos al DTO operacional (SIN datos financieros)
+   * ✅ Seguro para: tableros operacionales, listas de pedidos
+   * ❌ Excluye: totalPedido, idCliente, precios unitarios
+   */
+  private mapPedidosParaArea(pedidos: Pedido[]): PedidoAreaResponseDto[] {
+    return pedidos.map((p) => ({
+      id: p.id,
+      idReserva: p.idReserva,
+      tipoEntrega: p.tipoEntrega as 'delivery' | 'recogida',
+      estadoPedido: p.estadoPedido as any,
+      categoria: p.categoria,
+      notaCliente: p.notaCliente,
+      notaEmpleado: p.notaEmpleado,
+      fechaPedido: p.fechaPedido,
+      items: (p.items || []).map((i) => ({
+        id: i.id,
+        idServicio: i.idServicio,
+        nombreServicioSnapshot: i.nombreServicioSnapshot,
+        cantidad: i.cantidad,
+        observacion: i.observacion,
+        // ❌ NO incluir: precioUnitarioSnapshot, subtotal
+      })),
+      // ❌ NO incluir: totalPedido, idCliente
+    }));
+  }
+
+  /**
+   * Mapea Pedidos al DTO de reporte (CON datos financieros)
+   * ⚠️ Sensible: rigged for reports/auditing
+   * ✅ Incluye: totalPedido, desglose de precios para análisis
+   * ❌ Aún excluye: idCliente (dato personal)
+   */
+  private mapPedidosParaReporte(pedidos: Pedido[]): PedidoAreaReporteDto[] {
+    return pedidos.map((p) => ({
+      id: p.id,
+      idReserva: p.idReserva,
+      tipoEntrega: p.tipoEntrega as 'delivery' | 'recogida',
+      estadoPedido: p.estadoPedido as any,
+      categoria: p.categoria,
+      notaCliente: p.notaCliente,
+      notaEmpleado: p.notaEmpleado,
+      fechaPedido: p.fechaPedido,
+      totalPedido: parseFloat(String(p.totalPedido || 0)),
+      items: (p.items || []).map((i) => ({
+        id: i.id,
+        idServicio: i.idServicio,
+        nombreServicioSnapshot: i.nombreServicioSnapshot,
+        cantidad: i.cantidad,
+        precioUnitarioSnapshot: parseFloat(String(i.precioUnitarioSnapshot || 0)),
+        subtotal: parseFloat(String(i.subtotal || 0)),
+        observacion: i.observacion,
+      })),
+      // ❌ NO incluir: idCliente (es dato personal)
+    }));
+  }
+
+  /**
+   * Obtener pedidos para operación del área (SIN datos financieros)
+   * Reemplaza obtenerPedidosPorCategoria() en el endpoint operacional
+   */
+  async obtenerPedidosAreaOperacional(
+    idHotel: number,
+    categoria: string,
+    estado?: string,
+  ): Promise<PedidoAreaResponseDto[]> {
+    const query = this.pedidoRepository
+      .createQueryBuilder('p')
+      .where('p.idHotel = :idHotel', { idHotel })
+      .andWhere('p.categoria = :categoria', { categoria })
+      .leftJoinAndSelect('p.items', 'items')
+      .leftJoinAndSelect('items.servicio', 'servicio')
+      .orderBy('p.fechaPedido', 'DESC');
+
+    // Si no se especifica estado, excluir entregado y cancelado por defecto
+    if (!estado) {
+      query.andWhere('p.estadoPedido NOT IN (:...estados)', {
+        estados: ['entregado', 'cancelado'],
+      });
+    } else {
+      query.andWhere('p.estadoPedido = :estado', { estado });
+    }
+
+    const pedidos = await query.getMany();
+
+    // Mapear al DTO seguro (sin datos financieros)
+    return this.mapPedidosParaArea(pedidos);
+  }
+
+  /**
+   * Obtener reporte financiero de área (CON datos auditados)
+   * Endpoint segregado: /servicios/reportes/area/:idHotel/:categoria
+   * Requiere: @UseInterceptors(AreaAuditInterceptor)
+   *
+   * Retorna:
+   * - Listado de pedidos con precios (PedidoAreaReporteDto[])
+   * - Resumen agregado (AreaReportsResumenDto)
+   */
+  async obtenerReporteArea(
+    idHotel: number,
+    categoria: string,
+    fechaDesde?: Date,
+    fechaHasta?: Date,
+  ): Promise<{
+    detalle: PedidoAreaReporteDto[];
+    resumen: AreaReportsResumenDto;
+  }> {
+    // Valores por defecto: últimos 30 días
+    const hasta = fechaHasta || new Date();
+    const desde = fechaDesde || new Date(hasta.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Obtener todos los pedidos en el rango
+    const query = this.pedidoRepository
+      .createQueryBuilder('p')
+      .where('p.idHotel = :idHotel', { idHotel })
+      .andWhere('p.categoria = :categoria', { categoria })
+      .andWhere('p.fechaPedido BETWEEN :desde AND :hasta', {
+        desde,
+        hasta,
+      })
+      .leftJoinAndSelect('p.items', 'items')
+      .orderBy('p.fechaPedido', 'DESC');
+
+    const todosLosPedidos = await query.getMany();
+
+    // Mapear al DTO de reporte
+    const detalle = this.mapPedidosParaReporte(todosLosPedidos);
+
+    // Calcular resumen
+    const pendientes = todosLosPedidos.filter((p) => p.estadoPedido === 'pendiente');
+    const enPreparacion = todosLosPedidos.filter((p) => p.estadoPedido === 'en_preparacion');
+    const listos = todosLosPedidos.filter((p) => p.estadoPedido === 'listo');
+    const entregados = todosLosPedidos.filter((p) => p.estadoPedido === 'entregado');
+    const cancelados = todosLosPedidos.filter((p) => p.estadoPedido === 'cancelado');
+
+    // Sumas financieras
+    const ingresoTotal = todosLosPedidos.reduce(
+      (sum, p) => sum + parseFloat(String(p.totalPedido || 0)),
+      0,
+    );
+
+    const ingresoPendiente = [...pendientes, ...enPreparacion, ...listos].reduce(
+      (sum, p) => sum + parseFloat(String(p.totalPedido || 0)),
+      0,
+    );
+
+    const ingresoEntregado = entregados.reduce(
+      (sum, p) => sum + parseFloat(String(p.totalPedido || 0)),
+      0,
+    );
+
+    // Top productos
+    const productosMap = new Map<
+      number,
+      { nombre: string; cantidad: number; ingresos: number }
+    >();
+    for (const pedido of todosLosPedidos) {
+      for (const item of pedido.items || []) {
+        if (!productosMap.has(item.idServicio)) {
+          productosMap.set(item.idServicio, {
+            nombre: item.nombreServicioSnapshot,
+            cantidad: 0,
+            ingresos: 0,
+          });
+        }
+        const prod = productosMap.get(item.idServicio);
+        if (prod) {
+          prod.cantidad += item.cantidad;
+          prod.ingresos += parseFloat(String(item.subtotal || 0));
+        }
+      }
+    }
+
+    const topProductos = Array.from(productosMap.entries())
+      .map(([idServicio, data]) => ({
+        idServicio,
+        nombre: data.nombre,
+        cantidadVendida: data.cantidad,
+        ingresoGenerado: parseFloat(data.ingresos.toFixed(2)),
+      }))
+      .sort((a, b) => b.ingresoGenerado - a.ingresoGenerado)
+      .slice(0, 10);
+
+    // Desglose por tipo de entrega
+    const delivery = todosLosPedidos.filter((p) => p.tipoEntrega === 'delivery');
+    const recogida = todosLosPedidos.filter((p) => p.tipoEntrega === 'recogida');
+
+    const ingresoDelivery = delivery.reduce(
+      (sum, p) => sum + parseFloat(String(p.totalPedido || 0)),
+      0,
+    );
+
+    const ingresoRecogida = recogida.reduce(
+      (sum, p) => sum + parseFloat(String(p.totalPedido || 0)),
+      0,
+    );
+
+    // Construir resumen
+    const resumen: AreaReportsResumenDto = {
+      categoria,
+      periodo: {
+        desde,
+        hasta,
+      },
+      contadores: {
+        total: todosLosPedidos.length,
+        pendiente: pendientes.length,
+        en_preparacion: enPreparacion.length,
+        listo: listos.length,
+        entregado: entregados.length,
+        cancelado: cancelados.length,
+      },
+      financiero: {
+        ingresoTotal: parseFloat(ingresoTotal.toFixed(2)),
+        ingresoPendiente: parseFloat(ingresoPendiente.toFixed(2)),
+        ingresoEntregado: parseFloat(ingresoEntregado.toFixed(2)),
+        promedioPorPedido:
+          todosLosPedidos.length > 0
+            ? parseFloat((ingresoTotal / todosLosPedidos.length).toFixed(2))
+            : 0,
+        ticketPromedio:
+          entregados.length > 0
+            ? parseFloat((ingresoEntregado / entregados.length).toFixed(2))
+            : 0,
+      },
+      topProductos,
+      estadisticasEntrega: {
+        delivery: {
+          cantidad: delivery.length,
+          ingresos: parseFloat(ingresoDelivery.toFixed(2)),
+        },
+        recogida: {
+          cantidad: recogida.length,
+          ingresos: parseFloat(ingresoRecogida.toFixed(2)),
+        },
+      },
+      consultadoEn: new Date(),
+      consultadoPor: {
+        rol: 'area-employee', // sera sobrescrito por el controlador
+      },
+    };
+
+    return { detalle, resumen };
+  }
+
+  /**
+   * Obtener reporte CONSOLIDADO a nivel HOTEL
+   * ✅ Seguro para: Admin, SuperAdmin
+   * 📊 Agrupa datos de TODAS las áreas
+   *
+   * Retorna:
+   * - KPIs del hotel
+   * - Top 5 áreas
+   * - Detalles de cada área
+   * - Tendencias (últimos 30 días)
+   * - Estadísticas de entrega
+   */
+  async obtenerReporteHotelConsolidado(
+    idHotel: number,
+    fechaDesde?: Date,
+    fechaHasta?: Date,
+  ): Promise<HotelReportConsolidadoDto> {
+    // Valores por defecto: últimos 30 días
+    const hasta = fechaHasta || new Date();
+    const desde = fechaDesde || new Date(hasta.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Obtener TODOS los pedidos del hotel en el rango
+    const todosLosPedidos = await this.pedidoRepository
+      .createQueryBuilder('p')
+      .where('p.idHotel = :idHotel', { idHotel })
+      .andWhere('p.fechaPedido BETWEEN :desde AND :hasta', { desde, hasta })
+      .leftJoinAndSelect('p.items', 'items')
+      .orderBy('p.fechaPedido', 'DESC')
+      .getMany();
+
+    // ═══════════════════════════════════════════════════════════════
+    // 1. CALCULAR KPIs GLOBALES
+    // ═══════════════════════════════════════════════════════════════
+
+    const totalPedidos = todosLosPedidos.length;
+
+    // Sumar ingresos
+    const ingresoTotal = todosLosPedidos.reduce(
+      (sum, p) => sum + parseFloat(String(p.totalPedido || 0)),
+      0,
+    );
+
+    // Estado
+    const entregados = todosLosPedidos.filter((p) => p.estadoPedido === 'entregado');
+    const ingresoEntregado = entregados.reduce(
+      (sum, p) => sum + parseFloat(String(p.totalPedido || 0)),
+      0,
+    );
+
+    const ingresoPendiente = todosLosPedidos
+      .filter((p) => ['pendiente', 'en_preparacion', 'listo'].includes(p.estadoPedido))
+      .reduce((sum, p) => sum + parseFloat(String(p.totalPedido || 0)), 0);
+
+    const ticketPromedioGlobal =
+      totalPedidos > 0 ? parseFloat((ingresoTotal / totalPedidos).toFixed(2)) : 0;
+
+    const noches = Math.ceil((hasta.getTime() - desde.getTime()) / (1000 * 60 * 60 * 24));
+    const pedidosPorDia = noches > 0 ? parseFloat((totalPedidos / noches).toFixed(2)) : 0;
+
+    const tasaEntregaGlobal =
+      totalPedidos > 0
+        ? parseFloat(((entregados.length / totalPedidos) * 100).toFixed(2))
+        : 0;
+
+    // ═══════════════════════════════════════════════════════════════
+    // 2. AGRUPAR POR ÁREA
+    // ═══════════════════════════════════════════════════════════════
+
+    const porArea = new Map<string, Pedido[]>();
+    for (const pedido of todosLosPedidos) {
+      const cat = pedido.categoria || 'sin_categoria';
+      if (!porArea.has(cat)) {
+        porArea.set(cat, []);
+      }
+      const areaArray = porArea.get(cat);
+      if (areaArray) {
+        areaArray.push(pedido);
+      }
+    }
+
+    // Calcular resumen por área
+    const areasDetalle: AreaResumenDto[] = [];
+    const topAreas: { categoria: string; ingresos: number; pedidos: number }[] = [];
+
+    for (const [categoria, pedidos] of porArea.entries()) {
+      const entregadosArea = pedidos.filter((p) => p.estadoPedido === 'entregado');
+      const ingresoTotalArea = pedidos.reduce(
+        (sum, p) => sum + parseFloat(String(p.totalPedido || 0)),
+        0,
+      );
+      const ingresoEntregadoArea = entregadosArea.reduce(
+        (sum, p) => sum + parseFloat(String(p.totalPedido || 0)),
+        0,
+      );
+      const ingresoPendienteArea = pedidos
+        .filter((p) => ['pendiente', 'en_preparacion', 'listo'].includes(p.estadoPedido))
+        .reduce((sum, p) => sum + parseFloat(String(p.totalPedido || 0)), 0);
+
+      const ticketPromedioArea =
+        pedidos.length > 0 ? parseFloat((ingresoTotalArea / pedidos.length).toFixed(2)) : 0;
+
+      const tasaEntregaArea =
+        pedidos.length > 0
+          ? parseFloat(((entregadosArea.length / pedidos.length) * 100).toFixed(2))
+          : 0;
+
+      // Tipo preferido
+      const deliveries = pedidos.filter((p) => p.tipoEntrega === 'delivery').length;
+      const recogidas = pedidos.filter((p) => p.tipoEntrega === 'recogida').length;
+      const tipoPrefijo = deliveries >= recogidas ? 'delivery' : 'recogida';
+
+      const resumenArea: AreaResumenDto = {
+        categoria,
+        totalPedidos: pedidos.length,
+        ingresoTotal: parseFloat(ingresoTotalArea.toFixed(2)),
+        ingresoEntregado: parseFloat(ingresoEntregadoArea.toFixed(2)),
+        ingresoPendiente: parseFloat(ingresoPendienteArea.toFixed(2)),
+        ticketPromedio: ticketPromedioArea,
+        tasaEntrega: tasaEntregaArea,
+        tipoPrefijo,
+        contadores: {
+          pendiente: pedidos.filter((p) => p.estadoPedido === 'pendiente').length,
+          en_preparacion: pedidos.filter((p) => p.estadoPedido === 'en_preparacion').length,
+          listo: pedidos.filter((p) => p.estadoPedido === 'listo').length,
+          entregado: entregadosArea.length,
+          cancelado: pedidos.filter((p) => p.estadoPedido === 'cancelado').length,
+        },
+      };
+
+      areasDetalle.push(resumenArea);
+      topAreas.push({
+        categoria,
+        ingresos: parseFloat(ingresoTotalArea.toFixed(2)),
+        pedidos: pedidos.length,
+      });
+    }
+
+    // Ordenar y tomar top 5
+    topAreas.sort((a, b) => b.ingresos - a.ingresos);
+    const top5Areas: TopAreaDto[] = topAreas.slice(0, 5).map((area, idx) => ({
+      ranking: idx + 1,
+      categoria: area.categoria,
+      ingresos: area.ingresos,
+      pedidos: area.pedidos,
+      ticketPromedio: area.pedidos > 0 ? parseFloat((area.ingresos / area.pedidos).toFixed(2)) : 0,
+      porcentajeDelTotal:
+        ingresoTotal > 0
+          ? parseFloat(((area.ingresos / ingresoTotal) * 100).toFixed(2))
+          : 0,
+    }));
+
+    // ═══════════════════════════════════════════════════════════════
+    // 3. ESTADÍSTICAS DE ENTREGA
+    // ═══════════════════════════════════════════════════════════════
+
+    const deliveries = todosLosPedidos.filter((p) => p.tipoEntrega === 'delivery');
+    const recogidas = todosLosPedidos.filter((p) => p.tipoEntrega === 'recogida');
+
+    const ingresoDelivery = deliveries.reduce(
+      (sum, p) => sum + parseFloat(String(p.totalPedido || 0)),
+      0,
+    );
+    const ingresoRecogida = recogidas.reduce(
+      (sum, p) => sum + parseFloat(String(p.totalPedido || 0)),
+      0,
+    );
+
+    const estadisticasEntrega: EstadisticasEntregaConsolidadoDto = {
+      delivery: {
+        cantidad: deliveries.length,
+        ingresos: parseFloat(ingresoDelivery.toFixed(2)),
+        porcentaje:
+          totalPedidos > 0
+            ? parseFloat(((deliveries.length / totalPedidos) * 100).toFixed(2))
+            : 0,
+      },
+      recogida: {
+        cantidad: recogidas.length,
+        ingresos: parseFloat(ingresoRecogida.toFixed(2)),
+        porcentaje:
+          totalPedidos > 0
+            ? parseFloat(((recogidas.length / totalPedidos) * 100).toFixed(2))
+            : 0,
+      },
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // 4. TENDENCIAS (Últimos 30 días, por día)
+    // ═══════════════════════════════════════════════════════════════
+
+    const tendenciasMap = new Map<string, { pedidos: number; ingresos: number }>();
+
+    for (const pedido of todosLosPedidos) {
+      const fecha = new Date(pedido.fechaPedido);
+      fecha.setHours(0, 0, 0, 0);
+      const fechaStr = fecha.toISOString().split('T')[0];
+
+      if (!tendenciasMap.has(fechaStr)) {
+        tendenciasMap.set(fechaStr, { pedidos: 0, ingresos: 0 });
+      }
+
+      const tendencia = tendenciasMap.get(fechaStr);
+      if (tendencia) {
+        tendencia.pedidos += 1;
+        tendencia.ingresos += parseFloat(String(pedido.totalPedido || 0));
+      }
+    }
+
+    const tendencias = Array.from(tendenciasMap.entries())
+      .map(([fechaStr, data]) => ({
+        fecha: new Date(fechaStr),
+        pedidos: data.pedidos,
+        ingresos: parseFloat(data.ingresos.toFixed(2)),
+      }))
+      .sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
+
+    // ═══════════════════════════════════════════════════════════════
+    // 5. CONSTRUIR RESPUESTA
+    // ═══════════════════════════════════════════════════════════════
+
+    const kpis: HotelKpisDto = {
+      totalPedidos,
+      totalIngresos: parseFloat(ingresoTotal.toFixed(2)),
+      ingresoEntregado: parseFloat(ingresoEntregado.toFixed(2)),
+      ingresoPendiente: parseFloat(ingresoPendiente.toFixed(2)),
+      ticketPromedio: ticketPromedioGlobal,
+      pedidosPorDia,
+      tasaEntregaGlobal,
+      areaConMasIngresos: {
+        categoria: top5Areas[0]?.categoria || 'N/A',
+        ingresos: top5Areas[0]?.ingresos || 0,
+      },
+      pedidosHoy: todosLosPedidos.filter((p) => {
+        const hoy = new Date();
+        const fechaPedido = new Date(p.fechaPedido);
+        return fechaPedido.toDateString() === hoy.toDateString();
+      }).length,
+      ingresosHoy: todosLosPedidos
+        .filter((p) => {
+          const hoy = new Date();
+          const fechaPedido = new Date(p.fechaPedido);
+          return fechaPedido.toDateString() === hoy.toDateString();
+        })
+        .reduce((sum, p) => sum + parseFloat(String(p.totalPedido || 0)), 0),
+      periodo: { desde, hasta },
+    };
+
+    const reporte: HotelReportConsolidadoDto = {
+      idHotel,
+      kpis,
+      topAreas: top5Areas,
+      areasDetalle: areasDetalle.sort((a, b) => b.ingresoTotal - a.ingresoTotal),
+      estadisticasEntrega,
+      tendencias,
+      consultadoEn: new Date(),
+      consultadoPor: {
+        idAdmin: 0, // será sobrescrito por el controlador
+        rol: 'admin',
+      },
+    };
+
+    return reporte;
+  }
 }
+
