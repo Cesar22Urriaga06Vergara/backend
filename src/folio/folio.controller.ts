@@ -9,6 +9,8 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
+  Query,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -16,6 +18,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { FolioService } from './folio.service';
 import { CreateFolioDto, AgregarCargoDto, CobrarFolioDto, EliminarCargoDto } from './dto/folio.dto';
@@ -43,12 +46,64 @@ export class FolioController {
   async crearFolio(
     @Body() dto: CreateFolioDto,
     @Request() req: any,
-  ): Promise<Folio> {
-    return await this.folioService.crearFolio(
+  ): Promise<any> {
+    await this.folioService.crearFolio(
       dto.idHabitacion,
       dto.idReserva,
       req.user?.id,
     );
+
+    return await this.folioService.obtenerResumenFolio(dto.idHabitacion);
+  }
+
+  /**
+   * GET /folios/historial
+   * Obtener historial de folios (cerrados/pagados/activos) con filtros opcionales
+   */
+  @Get('historial')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('recepcionista', 'admin', 'superadmin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener historial de folios' })
+  @ApiQuery({ name: 'idHotel', type: Number, required: false })
+  @ApiQuery({ name: 'estado', type: String, required: false })
+  @ApiQuery({ name: 'fechaDesde', type: String, required: false })
+  @ApiQuery({ name: 'fechaHasta', type: String, required: false })
+  @ApiResponse({ status: 200, description: 'Historial obtenido exitosamente' })
+  async obtenerHistorial(
+    @Request() req: any,
+    @Query('idHotel') idHotel?: string,
+    @Query('estado') estado?: string,
+    @Query('fechaDesde') fechaDesde?: string,
+    @Query('fechaHasta') fechaHasta?: string,
+  ): Promise<any[]> {
+    const rol = req.user?.rol;
+    const userIdHotel = req.user?.idHotel;
+
+    let idHotelFiltro: number | undefined;
+
+    if (rol === 'superadmin') {
+      if (idHotel !== undefined) {
+        const parsed = Number(idHotel);
+        if (Number.isNaN(parsed) || parsed <= 0) {
+          throw new BadRequestException('idHotel debe ser un número válido');
+        }
+        idHotelFiltro = parsed;
+      }
+    } else {
+      if (!userIdHotel) {
+        throw new BadRequestException('Usuario debe estar asignado a un hotel');
+      }
+
+      idHotelFiltro = Number(userIdHotel);
+    }
+
+    return await this.folioService.obtenerHistorial({
+      idHotel: idHotelFiltro,
+      estado,
+      fechaDesde,
+      fechaHasta,
+    });
   }
 
   /**
@@ -85,12 +140,14 @@ export class FolioController {
     @Param('idHabitacion', ParseIntPipe) idHabitacion: number,
     @Body() dto: AgregarCargoDto,
     @Request() req: any,
-  ): Promise<Folio> {
-    return await this.folioService.agregarCargo(
+  ): Promise<any> {
+    await this.folioService.agregarCargo(
       idHabitacion,
       dto,
       req.user?.fullName || req.user?.nombre || 'Sistema',
     );
+
+    return await this.folioService.obtenerResumenFolio(idHabitacion);
   }
 
   /**
@@ -109,8 +166,10 @@ export class FolioController {
   async eliminarCargo(
     @Param('idHabitacion', ParseIntPipe) idHabitacion: number,
     @Param('idCargo') idCargo: string,
-  ): Promise<Folio> {
-    return await this.folioService.eliminarCargo(idHabitacion, idCargo);
+  ): Promise<any> {
+    await this.folioService.eliminarCargo(idHabitacion, idCargo);
+
+    return await this.folioService.obtenerResumenFolio(idHabitacion);
   }
 
   /**
@@ -127,8 +186,10 @@ export class FolioController {
   @ApiResponse({ status: 404, description: 'Folio no encontrado' })
   async cerrarFolio(
     @Param('idHabitacion', ParseIntPipe) idHabitacion: number,
-  ): Promise<Folio> {
-    return await this.folioService.cerrarFolio(idHabitacion);
+  ): Promise<any> {
+    await this.folioService.cerrarFolio(idHabitacion);
+
+    return await this.folioService.obtenerResumenFolio(idHabitacion);
   }
 
   /**
@@ -151,7 +212,20 @@ export class FolioController {
   async cobrarFolio(
     @Param('idHabitacion', ParseIntPipe) idHabitacion: number,
     @Body() dto: CobrarFolioDto,
-  ): Promise<{ folio: Folio; pago: any }> {
-    return await this.folioService.cobrarFolio(idHabitacion, dto);
+  ): Promise<any> {
+    const respuesta = await this.folioService.cobrarFolio(idHabitacion, dto);
+
+    // Intentar obtener resumen enriquecido, pero si falla, retornar lo que tengo
+    try {
+      const folioResumen = await this.folioService.obtenerResumenFolio(idHabitacion);
+      return {
+        ...respuesta,
+        folio: folioResumen,
+      };
+    } catch (error) {
+      // Si falla enriquecimiento, retorna al menos lo que tenemos
+      console.warn('Advertencia: No se pudo enriquecer folio en response:', error.message);
+      return respuesta;
+    }
   }
 }

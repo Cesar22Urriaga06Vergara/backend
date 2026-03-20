@@ -19,6 +19,7 @@ import { DisponibilidadQueryDto } from './dto/disponibilidad-query.dto';
 import { DisponibilidadResponseDto, HabitacionDisponibleDto } from './dto/disponibilidad.dto';
 import { FacturaService } from '../factura/factura.service';
 import { Factura } from '../factura/entities/factura.entity';
+import { FolioService } from '../folio/folio.service';
 import {
   ReservaEstado,
   esTransicionValida,
@@ -39,6 +40,7 @@ export class ReservaService {
     private dataSource: DataSource,
     @Inject(forwardRef(() => FacturaService))
     private facturaService: FacturaService,
+    private folioService: FolioService,
   ) {}
 
   /**
@@ -576,7 +578,27 @@ export class ReservaService {
       reserva.estadoReserva = ReservaEstado.CONFIRMADA;
     }
 
-    return await this.reservaRepository.save(reserva);
+    const reservaGuardada = await this.reservaRepository.save(reserva);
+
+    // Abrir folio automáticamente para que Caja y Checkout queden conectados.
+    if (reservaGuardada.idHabitacion) {
+      let debeCrearFolio = true;
+
+      try {
+        const folioExistente = await this.folioService.obtenerFolio(reservaGuardada.idHabitacion);
+        debeCrearFolio = folioExistente.estadoPago !== 'ACTIVO';
+      } catch (error) {
+        if (!(error instanceof NotFoundException)) {
+          throw error;
+        }
+      }
+
+      if (debeCrearFolio) {
+        await this.folioService.crearFolio(reservaGuardada.idHabitacion, reservaGuardada.id);
+      }
+    }
+
+    return reservaGuardada;
   }
 
   /**
@@ -612,40 +634,44 @@ export class ReservaService {
         );
       }
 
-      // Actualizar reserva
+      if (!reserva.idHabitacion) {
+        throw new BadRequestException(
+          'La reserva no tiene habitación asignada para validar el cobro del folio',
+        );
+      }
+
+      let folio;
+      try {
+        folio = await this.folioService.obtenerFolio(reserva.idHabitacion);
+      } catch (error) {
+        if (error instanceof NotFoundException) {
+          throw new BadRequestException(
+            `No existe folio activo para la habitación ${reserva.idHabitacion}. Debe validarlo en Caja antes del check-out`,
+          );
+        }
+
+        throw error;
+      }
+
+      const folioTieneSaldo = Number(folio.total || 0) > 0;
+
+      if (folioTieneSaldo && folio.estadoPago !== 'PAGADO') {
+        throw new BadRequestException(
+          `Debe registrar el cobro en Caja antes de confirmar el check-out. Estado actual del folio: ${folio.estadoPago}`,
+        );
+      }
+
+      // Actualizar reserva - Acción LIMPIA sin generar factura
       reserva.checkoutReal = new Date();
       reserva.estadoReserva = ReservaEstado.COMPLETADA;
 
       const reservaGuardada = await queryRunner.manager.save(Reserva, reserva);
 
-      // Generar factura dentro de la transacción
-      let factura: Factura | null = null;
-      try {
-        if (this.facturaService) {
-          console.log(`[FACTURA] Iniciando generación de factura para reserva ${reservaGuardada.id}...`);
-          // Crear factura usando el queryRunner existente para mantener la transacción
-          factura = await this.facturaService.generarDesdeReserva(reservaGuardada, queryRunner);
-          console.log(`[FACTURA] ✅ Factura generada exitosamente:`, factura?.numeroFactura);
-        } else {
-          console.warn('[FACTURA] ⚠️ FacturaService no disponible, omitiendo generación');
-        }
-      } catch (error: any) {
-        // Loguear el error y hacer rollback de toda la transacción
-        console.error('❌ [FACTURA] Error al generar factura:', {
-          message: error?.message,
-          code: error?.code,
-          stack: error?.stack,
-          reservaId: reservaGuardada.id,
-        });
-
-        // Hacer rollback para revertir cambios en reserva y factura
-        throw error;
-      }
-
-      // Si llegamos aquí, hacer commit de toda la transacción
+      // Commit de la transacción
       await queryRunner.commitTransaction();
 
-      return { reserva: reservaGuardada, factura };
+      // Checkout completado sin factura - la factura se genera en Caja
+      return { reserva: reservaGuardada };
     } catch (error: any) {
       // Hacer rollback de la transacción completa
       await queryRunner.rollbackTransaction();

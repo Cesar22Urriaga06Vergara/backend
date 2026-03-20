@@ -205,64 +205,65 @@ export class FacturaService {
         servicios.forEach(s => serviciosMap.set(s.id, s));
       }
 
-      // Procesar items con detección de INC
+      // Procesar items con mapeo de categoría
       for (const pedido of pedidosEntregados) {
         for (const item of pedido.items) {
           const subtotalServicio =
             Number(item.cantidad) * Number(item.precioUnitarioSnapshot);
           
-          const servicio = serviciosMap.get(item.idServicio);
-          const esAlcoholico = servicio?.esAlcoholico || false;
-          
           // Mapear categoría según tipo de servicio
-          let categoriaServiciosId = 6; // Room Service por defecto
+          let categoriaServiciosId = 2; // Default: Cafetería/Restaurante
+          const servicio = serviciosMap.get(item.idServicio);
           
           if (servicio?.categoria === 'cafeteria') {
-            categoriaServiciosId = 2; // Restaurante/Cafetería
+            categoriaServiciosId = 2;
           } else if (servicio?.categoria === 'minibar') {
-            categoriaServiciosId = 3; // Minibar
+            categoriaServiciosId = 3;
           } else if (servicio?.categoria === 'lavanderia') {
-            categoriaServiciosId = 4; // Lavandería
+            categoriaServiciosId = 4;
           } else if (servicio?.categoria === 'spa') {
-            categoriaServiciosId = 5; // Spa
+            categoriaServiciosId = 5;
+          } else if (servicio?.categoria === 'room_service') {
+            categoriaServiciosId = 6;
           }
 
-          const porcentajeInc = esAlcoholico ? 8 : undefined; // INC 8% solo para alcohólicos
-          const montoInc = esAlcoholico ? (subtotalServicio * 0.08) : 0;
-
           detalles.push({
-            tipoConcepto: esAlcoholico ? 'servicio_alcoholico' : 'servicio',
+            tipoConcepto: 'servicio',
             descripcion: `${item.nombreServicioSnapshot} (${new Date(pedido.fechaPedido).toLocaleDateString('es-CO')})`,
             cantidad: item.cantidad,
             precioUnitario: Number(item.precioUnitarioSnapshot),
             subtotal: subtotalServicio,
             descuento: 0,
             total: subtotalServicio,
-            porcentajeInc,
-            montoInc,
             idReferencia: item.id,
             categoriaServiciosId,
           });
         }
       }
 
-      // 3. Calcular desglose de impuestos usando ImpuestoService
-      // Preparar datos para cálculo (solo los campos necesarios)
+      // Calcular desglose de impuestos por categoría usando ImpuestoService
       const detallesParaCalculo = detalles.map(d => ({
         categoriaServiciosId: d.categoriaServiciosId || 1,
         subtotal: d.subtotal || 0,
       }));
 
-      const { desgloseImpuestos, desgloseMonetario, montoIvaTotal, montoIncTotal, subtotalTotal } =
-        await this.calcularDesgloseImpuestos(
-          detallesParaCalculo,
-          reserva.idHotel,
-          reserva.idCliente,
-        );
+      // Obtener tax profile del cliente
+      const cliente = await this.clienteService.findOne(reserva.idCliente);
+      const taxProfile = cliente?.taxProfile || 'RESIDENT';
 
-      const total = subtotalTotal + montoIvaTotal + montoIncTotal;
+      const taxCalculation = await this.impuestoService.calculateFacturaDesglose(
+        detallesParaCalculo,
+        reserva.idHotel,
+        taxProfile,
+      );
 
-      // 4. Crear factura
+      // Extraer totales de la respuesta
+      const montoIvaTotal = taxCalculation.totales.ivaTotal;
+      const montoIncTotal = taxCalculation.totales.incTotal;
+      const subtotalTotal = detalles.reduce((sum, d) => sum + (d.subtotal || 0), 0);
+      const total = taxCalculation.totales.total;
+
+      // Crear factura con valores calculados correctamente
       const factura = new Factura();
       factura.numeroFactura = numeroFactura;
       factura.uuid = randomUUID();
@@ -273,23 +274,32 @@ export class FacturaService {
       factura.emailCliente = reserva.emailCliente;
       factura.idHotel = reserva.idHotel;
       factura.subtotal = subtotalTotal;
+      factura.montoIva = montoIvaTotal;
+      factura.porcentajeIva = 19;
       factura.montoInc = montoIncTotal;
       factura.porcentajeInc = montoIncTotal > 0 ? 8 : undefined;
-      factura.porcentajeIva = 19;
-      factura.montoIva = montoIvaTotal;
       factura.total = total;
-      
-      // NUEVO: Desglose de impuestos y monetario
-      factura.desgloseImpuestos = desgloseImpuestos;
-      factura.desgloseMonetario = desgloseMonetario;
-      
-      // NUEVO: Estado de factura (BORRADOR para nuevas facturas)
       factura.estadoFactura = 'BORRADOR';
       factura.estado = 'pendiente';
       factura.observaciones = '';
       factura.fechaEmision = new Date();
       
-      // Preparar datos JSON (simulado)
+      // Desglose detallado por categoría
+      // Transformar formato de taxCalculation para que coincida con la entidad
+      const desgloseFormateado: Record<string, any> = {};
+      for (const [categoria, valores] of Object.entries(taxCalculation.subtotalPorCategoria)) {
+        desgloseFormateado[categoria] = {
+          subtotal: (valores as any).monto,
+          iva: (valores as any).iva,
+          inc: (valores as any).inc,
+          total: (valores as any).total,
+        };
+      }
+      
+      factura.desgloseImpuestos = desgloseFormateado;
+      factura.desgloseMonetario = desgloseFormateado;
+      
+      // JSON para almacenamiento
       factura.jsonData = JSON.stringify({
         numeroFactura,
         uuid: factura.uuid,
@@ -297,18 +307,24 @@ export class FacturaService {
           nombre: reserva.nombreCliente,
           cedula: reserva.cedulaCliente,
           email: reserva.emailCliente,
+          taxProfile,
         },
-        detalles,
-        montos: { 
+        detalles: detalles.map(d => ({
+          descripcion: d.descripcion,
+          cantidad: d.cantidad,
+          precioUnitario: d.precioUnitario,
+          subtotal: d.subtotal,
+          categoria: this.obtenerNombreCategoria(d.categoriaServiciosId || 1),
+        })),
+        montos: {
           subtotal: subtotalTotal,
-          montoInc: montoIncTotal,
-          porcentajeIncAplicado: montoIncTotal > 0 ? 8 : null,
+          iva: montoIvaTotal,
           porcentajeIva: 19,
-          montoIva: montoIvaTotal,
+          inc: montoIncTotal,
+          porcentajeInc: montoIncTotal > 0 ? 8 : null,
           total,
         },
-        desgloseImpuestos,
-        desgloseMonetario,
+        desgloseImpuestos: taxCalculation.subtotalPorCategoria,
         fechaEmision: new Date().toISOString(),
       });
       
@@ -426,6 +442,22 @@ export class FacturaService {
     }
 
     return factura;
+  }
+
+  /**
+   * Obtener nombre de categoría por ID
+   * Mapeo: 1=Alojamiento, 2=Cafetería, 3=Minibar, 4=Lavandería, 5=Spa, 6=Room Service
+   */
+  private obtenerNombreCategoria(categoriaId: number): string {
+    const categorias: Record<number, string> = {
+      1: 'Alojamiento',
+      2: 'Cafetería',
+      3: 'Minibar',
+      4: 'Lavandería',
+      5: 'Spa',
+      6: 'Room Service',
+    };
+    return categorias[categoriaId] || `Categoría ${categoriaId}`;
   }
 
   /**

@@ -19,6 +19,8 @@ export interface Cargo {
   categoria: string; // 'SERVICIO', 'ADICIONAL', 'INCIDENCIA', 'OTRO'
   fechaAñadido: Date;
   agregadoPor: string; // nombre del usuario que agregó el cargo
+  referencia?: string;
+  automatico?: boolean;
 }
 
 @Entity('folios')

@@ -7,11 +7,13 @@ import { Habitacion } from '../habitacion/entities/habitacion.entity';
 import { TipoHabitacion } from '../tipo-habitacion/entities/tipo-habitacion.entity';
 import { Cliente } from '../cliente/entities/cliente.entity';
 import { FacturaModule } from '../factura/factura.module';
+import { FolioModule } from '../folio/folio.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Reserva, Habitacion, TipoHabitacion, Cliente]),
     forwardRef(() => FacturaModule),
+    FolioModule,
   ],
   controllers: [ReservaController],
   providers: [ReservaService],
