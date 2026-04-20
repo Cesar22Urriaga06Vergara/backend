@@ -27,7 +27,7 @@ export class Servicio {
   @Column({ type: 'text', nullable: true })
   descripcion: string;
 
-  @Column({ type: 'enum', enum: ['cafeteria', 'lavanderia', 'spa', 'room_service', 'minibar', 'otros'], default: 'otros' })
+  @Column({ type: 'enum', enum: ['cafeteria', 'lavanderia', 'spa', 'room_service', 'minibar', 'transporte', 'tours', 'eventos', 'mantenimiento', 'otros'], default: 'otros' })
   categoria: string;
 
   @Column({ name: 'precio_unitario', type: 'decimal', precision: 12, scale: 2 })

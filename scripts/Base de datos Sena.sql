@@ -203,7 +203,15 @@ INSERT INTO `empleados` (`id`, `id_hotel`, `cedula`, `nombre`, `apellido`, `emai
 	(1, NULL, '1003001750', 'Cesar', 'Urriaga', 'urriagac44@gmail.com', '$2b$10$OJ1eEny.HEuGrLI.bsDZUOVcOF9aqR/LYjyqRMBwWNuLldjfV3Msy', 'superadmin', 'RESIDENT', 'activo', '2026-03-14 12:52:05.423254', '2026-03-14 13:02:41.926290', NULL, NULL),
 	(2, 1, '123456789', 'Juan', 'Sena', 'recepcionista@gmail.com', '$2b$10$wXPhbqO8u3obk4/2iKbGYO.YbCMw3bPZlUaBEcKMoBOJiz0YvTCFy', 'recepcionista', 'RESIDENT', 'activo', '2026-03-14 13:13:37.300321', '2026-03-14 13:13:37.300321', NULL, NULL),
 	(3, 1, '1003001751', 'Cesar', 'Urriaga', 'admin@gmail.com', '$2b$10$2RQOr05vUfP4ikrygcpAgem0VHaeEoQtnvcHjaio/RjZgatQ0Emg2', 'admin', 'RESIDENT', 'activo', '2026-03-15 11:41:23.766228', '2026-03-15 11:41:23.766228', NULL, NULL),
-	(6, 1, '234567890', 'Camilo Torres', '', 'camilo@gmail.com', '$2b$10$gR9wLTArbnDn97I4Pud5k.e9BXQL6B5k3Xm8zanMXd4.6l1R2ak96', 'cafeteria', 'RESIDENT', 'activo', '2026-03-15 20:14:42.287163', '2026-03-15 20:14:42.287163', NULL, NULL);
+	(6, 1, '234567890', 'Camilo Torres', '', 'camilo@gmail.com', '$2b$10$gR9wLTArbnDn97I4Pud5k.e9BXQL6B5k3Xm8zanMXd4.6l1R2ak96', 'cafeteria', 'RESIDENT', 'activo', '2026-03-15 20:14:42.287163', '2026-03-15 20:14:42.287163', NULL, NULL),
+	(7, 1, '345678901', 'Ana García', '', 'lavanderia@gmail.com', '$2b$10$gR9wLTArbnDn97I4Pud5k.e9BXQL6B5k3Xm8zanMXd4.6l1R2ak96', 'lavanderia', 'RESIDENT', 'activo', '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000', NULL, NULL),
+	(8, 1, '456789012', 'María López', '', 'spa@gmail.com', '$2b$10$gR9wLTArbnDn97I4Pud5k.e9BXQL6B5k3Xm8zanMXd4.6l1R2ak96', 'spa', 'RESIDENT', 'activo', '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000', NULL, NULL),
+	(9, 1, '567890123', 'Pedro Ruiz', '', 'roomservice@gmail.com', '$2b$10$gR9wLTArbnDn97I4Pud5k.e9BXQL6B5k3Xm8zanMXd4.6l1R2ak96', 'room_service', 'RESIDENT', 'activo', '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000', NULL, NULL),
+	(10, 1, '678901234', 'Laura Díaz', '', 'minibar@gmail.com', '$2b$10$gR9wLTArbnDn97I4Pud5k.e9BXQL6B5k3Xm8zanMXd4.6l1R2ak96', 'minibar', 'RESIDENT', 'activo', '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000', NULL, NULL),
+	(11, 1, '789012345', 'Carlos Mora', '', 'transporte@gmail.com', '$2b$10$gR9wLTArbnDn97I4Pud5k.e9BXQL6B5k3Xm8zanMXd4.6l1R2ak96', 'transporte', 'RESIDENT', 'activo', '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000', NULL, NULL),
+	(12, 1, '890123456', 'Sandra Vega', '', 'tours@gmail.com', '$2b$10$gR9wLTArbnDn97I4Pud5k.e9BXQL6B5k3Xm8zanMXd4.6l1R2ak96', 'tours', 'RESIDENT', 'activo', '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000', NULL, NULL),
+	(13, 1, '901234567', 'Diego Pinto', '', 'eventos@gmail.com', '$2b$10$gR9wLTArbnDn97I4Pud5k.e9BXQL6B5k3Xm8zanMXd4.6l1R2ak96', 'eventos', 'RESIDENT', 'activo', '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000', NULL, NULL),
+	(14, 1, '012345678', 'Juliana Ríos', '', 'mantenimiento@gmail.com', '$2b$10$gR9wLTArbnDn97I4Pud5k.e9BXQL6B5k3Xm8zanMXd4.6l1R2ak96', 'mantenimiento', 'RESIDENT', 'activo', '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000', NULL, NULL);
 
 -- Volcando estructura para tabla hotel.factura_cambios
 CREATE TABLE IF NOT EXISTS `factura_cambios` (
@@ -565,7 +573,7 @@ CREATE TABLE IF NOT EXISTS `servicios` (
   `id_hotel` int(11) NOT NULL,
   `nombre` varchar(150) NOT NULL,
   `descripcion` text DEFAULT NULL,
-  `categoria` enum('cafeteria','lavanderia','spa','room_service','minibar','otros') NOT NULL DEFAULT 'otros',
+  `categoria` enum('cafeteria','lavanderia','spa','room_service','minibar','transporte','tours','eventos','mantenimiento','otros') NOT NULL DEFAULT 'otros',
   `categoria_servicios_id` int(11) DEFAULT NULL,
   `es_alcoholico` tinyint(1) NOT NULL DEFAULT 0,
   `precio_unitario` decimal(12,2) NOT NULL,
@@ -628,13 +636,38 @@ INSERT INTO `servicios` (`id`, `id_hotel`, `nombre`, `descripcion`, `categoria`,
 	(41, 1, 'Lavado cobijas', 'Cobertores', 'lavanderia', 4, 0, 45000.00, 'unidad', NULL, 1, 0, 1, '2026-03-16 19:07:35.873453', '2026-03-19 15:17:47.430514'),
 	(42, 1, 'Reparación ropa', 'Arreglos', 'lavanderia', 4, 0, 20000.00, 'prenda', NULL, 1, 0, 1, '2026-03-16 19:07:35.873453', '2026-03-19 15:17:47.430514'),
 	(43, 1, 'Servicio premium', 'Lavado VIP', 'lavanderia', 4, 0, 60000.00, 'kg', NULL, 1, 1, 0, '2026-03-16 19:07:35.873453', '2026-03-19 15:17:47.430514'),
-	(44, 1, 'Servicio taxi', 'Transporte', 'otros', 5, 0, 30000.00, 'viaje', NULL, 1, 1, 0, '2026-03-16 19:07:35.873453', '2026-03-19 15:17:47.484576'),
-	(45, 1, 'Tour ciudad', 'Guía turístico', 'otros', 8, 0, 150000.00, 'dia', NULL, 1, 0, 1, '2026-03-16 19:07:35.873453', '2026-03-19 15:17:47.470128'),
-	(46, 1, 'Alquiler bicicleta', 'Bicicleta', 'otros', 5, 0, 25000.00, 'dia', NULL, 1, 0, 1, '2026-03-16 19:07:35.873453', '2026-03-19 15:17:47.484576'),
-	(47, 1, 'Traslado aeropuerto', 'Transporte aeropuerto', 'otros', 5, 0, 80000.00, 'viaje', NULL, 1, 1, 0, '2026-03-16 19:07:35.873453', '2026-03-19 15:17:47.484576'),
-	(48, 1, 'Impresiones', 'Documentos', 'otros', 5, 0, 2000.00, 'hoja', NULL, 1, 1, 1, '2026-03-16 19:07:35.873453', '2026-03-19 15:17:47.484576'),
-	(49, 1, 'Sala reuniones', 'Sala empresarial', 'otros', 5, 0, 100000.00, 'hora', NULL, 1, 0, 1, '2026-03-16 19:07:35.873453', '2026-03-19 15:17:47.484576'),
-	(50, 1, 'Servicio despertador', 'Wake up call', 'otros', 5, 0, 0.00, 'servicio', NULL, 1, 0, 1, '2026-03-16 19:07:35.873453', '2026-03-19 15:17:47.484576');
+	(44, 1, 'Servicio taxi', 'Taxi en la ciudad', 'transporte', 7, 0, 30000.00, 'viaje', NULL, 1, 1, 0, '2026-03-16 19:07:35.873453', '2026-04-06 08:00:00.000000'),
+	(45, 1, 'Tour ciudad', 'Guía turístico por la ciudad', 'tours', 8, 0, 150000.00, 'dia', NULL, 1, 0, 1, '2026-03-16 19:07:35.873453', '2026-04-06 08:00:00.000000'),
+	(46, 1, 'Alquiler bicicleta', 'Bicicleta por día', 'transporte', 7, 0, 25000.00, 'dia', NULL, 1, 0, 1, '2026-03-16 19:07:35.873453', '2026-04-06 08:00:00.000000'),
+	(47, 1, 'Traslado aeropuerto', 'Transporte al aeropuerto', 'transporte', 7, 0, 80000.00, 'viaje', NULL, 1, 1, 0, '2026-03-16 19:07:35.873453', '2026-04-06 08:00:00.000000'),
+	(48, 1, 'Impresiones y fotocopias', 'Impresión de documentos', 'mantenimiento', 10, 0, 2000.00, 'hoja', NULL, 1, 1, 1, '2026-03-16 19:07:35.873453', '2026-04-06 08:00:00.000000'),
+	(49, 1, 'Salón de reuniones', 'Sala empresarial por hora', 'eventos', 9, 0, 100000.00, 'hora', NULL, 1, 0, 1, '2026-03-16 19:07:35.873453', '2026-04-06 08:00:00.000000'),
+	(50, 1, 'Servicio despertador', 'Wake up call', 'mantenimiento', 10, 0, 0.00, 'servicio', NULL, 1, 0, 1, '2026-03-16 19:07:35.873453', '2026-04-06 08:00:00.000000'),
+	-- Servicios de Transporte adicionales
+	(51, 1, 'Taxi ejecutivo', 'Taxi de lujo con chofer', 'transporte', 7, 0, 60000.00, 'viaje', NULL, 1, 1, 0, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(52, 1, 'Van grupal', 'Transporte para grupos hasta 10 personas', 'transporte', 7, 0, 120000.00, 'viaje', NULL, 1, 1, 0, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(53, 1, 'Alquiler moto', 'Moto por día para recorridos', 'transporte', 7, 0, 45000.00, 'dia', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(54, 1, 'Servicio nocturno', 'Transporte nocturno con recargo', 'transporte', 7, 0, 50000.00, 'viaje', NULL, 1, 1, 0, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(55, 1, 'Traslado interurbano', 'Transporte a ciudades cercanas', 'transporte', 7, 0, 200000.00, 'viaje', NULL, 1, 1, 0, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	-- Servicios de Tours adicionales
+	(56, 1, 'Tour histórico', 'Recorrido por lugares históricos', 'tours', 8, 0, 120000.00, 'persona', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(57, 1, 'Tour gastronómico', 'Degustación de comida local y regional', 'tours', 8, 0, 95000.00, 'persona', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(58, 1, 'Tour de aventura', 'Actividades outdoor y senderismo', 'tours', 8, 0, 180000.00, 'persona', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(59, 1, 'Tour nocturno', 'Recorrido nocturno por la ciudad', 'tours', 8, 0, 75000.00, 'persona', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(60, 1, 'Tour en lancha', 'Paseo fluvial guiado', 'tours', 8, 0, 140000.00, 'persona', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	-- Servicios de Eventos
+	(61, 1, 'Salón de banquetes', 'Salón grande para celebraciones', 'eventos', 9, 0, 500000.00, 'evento', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(62, 1, 'Decoración básica', 'Paquete decoración estándar', 'eventos', 9, 0, 250000.00, 'evento', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(63, 1, 'Decoración premium', 'Decoración personalizada de lujo', 'eventos', 9, 0, 600000.00, 'evento', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(64, 1, 'Catering básico', 'Servicio de alimentación para evento', 'eventos', 9, 0, 35000.00, 'persona', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(65, 1, 'Equipo audiovisual', 'Proyector, sonido y pantalla', 'eventos', 9, 0, 200000.00, 'evento', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(66, 1, 'Paquete cumpleaños', 'Decoración, torta y atención especial', 'eventos', 9, 0, 350000.00, 'evento', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	-- Servicios de Mantenimiento / Soporte
+	(67, 1, 'Planchado de ropa', 'Plancha disponible en habitación', 'mantenimiento', 10, 0, 15000.00, 'servicio', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(68, 1, 'Secador de cabello', 'Préstamo de secador profesional', 'mantenimiento', 10, 0, 0.00, 'servicio', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(69, 1, 'Kit de costura', 'Kit básico de costura y reparaciones', 'mantenimiento', 10, 0, 0.00, 'servicio', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(70, 1, 'Adaptador eléctrico', 'Adaptador universal de corriente', 'mantenimiento', 10, 0, 0.00, 'servicio', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000'),
+	(71, 1, 'Solicitud mantenimiento', 'Reporte de daño o solicitud de reparación', 'mantenimiento', 10, 0, 0.00, 'servicio', NULL, 1, 0, 1, '2026-04-06 08:00:00.000000', '2026-04-06 08:00:00.000000');
 
 -- Volcando estructura para tabla hotel.tax_profile_audit
 CREATE TABLE IF NOT EXISTS `tax_profile_audit` (

@@ -16,7 +16,6 @@ import { Pedido } from './pedido.entity';
 @Entity('pedido_cambios')
 @Index('idx_pedido', ['idPedido'])
 @Index('idx_timestamp', ['timestamp'])
-@Index('idx_pedido_timestamp', ['idPedido', 'timestamp'])
 export class PedidoCambio {
   @PrimaryGeneratedColumn()
   id: number;

@@ -156,7 +156,7 @@ export class ServicioController {
 
   @Get('pedidos/area/:idHotel/:categoria')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('cafeteria', 'lavanderia', 'spa', 'room_service', 'admin', 'superadmin')
+  @Roles('cafeteria', 'lavanderia', 'spa', 'room_service', 'minibar', 'transporte', 'tours', 'eventos', 'mantenimiento', 'admin', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ 
     summary: 'Obtener pedidos operacionales del área (sin datos financieros)' 
@@ -180,7 +180,7 @@ export class ServicioController {
   @Get('reportes/area/:idHotel/:categoria')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @UseInterceptors(AreaAuditInterceptor)
-  @Roles('cafeteria', 'lavanderia', 'spa', 'room_service', 'admin', 'superadmin')
+  @Roles('cafeteria', 'lavanderia', 'spa', 'room_service', 'minibar', 'transporte', 'tours', 'eventos', 'mantenimiento', 'admin', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ 
     summary: 'Obtener reporte financiero del área (AUDITADO - con datos sensibles)' 
@@ -283,7 +283,7 @@ export class ServicioController {
 
     // Empleados de área: solo pedidos de su hotel
     if (
-      ['cafeteria', 'lavanderia', 'spa', 'room_service'].includes(userRole) &&
+      ['cafeteria', 'lavanderia', 'spa', 'room_service', 'minibar', 'transporte', 'tours', 'eventos', 'mantenimiento'].includes(userRole) &&
       pedido.idHotel !== userIdHotel
     ) {
       throw new ForbiddenException(
@@ -313,7 +313,7 @@ export class ServicioController {
 
   @Patch('pedidos/:id/estado')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('cafeteria', 'lavanderia', 'spa', 'room_service', 'admin', 'superadmin')
+  @Roles('cafeteria', 'lavanderia', 'spa', 'room_service', 'minibar', 'transporte', 'tours', 'eventos', 'mantenimiento', 'admin', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Actualizar estado del pedido (Empleado)' })
   @ApiResponse({ status: 200, description: 'Estado actualizado' })

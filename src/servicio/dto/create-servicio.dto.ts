@@ -2,7 +2,7 @@ import { IsString, IsNotEmpty, IsNumber, IsOptional, IsEnum, IsBoolean, Min, Val
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-const CATEGORIAS_SERVICIO = ['cafeteria', 'lavanderia', 'spa', 'room_service', 'minibar', 'otros'];
+const CATEGORIAS_SERVICIO = ['cafeteria', 'lavanderia', 'spa', 'room_service', 'minibar', 'transporte', 'tours', 'eventos', 'mantenimiento', 'otros'];
 
 export class CreateServicioDto {
   @ApiProperty({ example: 1, description: 'ID del hotel' })
