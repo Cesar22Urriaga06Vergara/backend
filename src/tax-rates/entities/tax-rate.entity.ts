@@ -50,7 +50,7 @@ export class TaxRate {
 
   @Column({
     type: 'date',
-    default: () => 'CURDATE()',
+    default: () => '(CURDATE())',
     name: 'fecha_vigencia_inicio',
   })
   fechaVigenciaInicio: Date;
