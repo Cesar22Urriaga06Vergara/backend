@@ -12,7 +12,6 @@ import {
 
 @Entity('categoria_servicios')
 @Index(['idHotel'])
-@Index(['codigo'])
 @Index(['activa'])
 export class CategoriaServicio {
   @PrimaryGeneratedColumn()
