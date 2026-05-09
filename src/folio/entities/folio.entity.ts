@@ -37,7 +37,7 @@ export class Folio {
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   subtotal: number; // Suma de cargos
 
-  @Column({ type: 'json', default: () => "'[]'" })
+  @Column({ type: 'json' })
   cargos: Cargo[]; // Array de cargos agregados
 
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
