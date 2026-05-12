@@ -8,7 +8,24 @@ function getConnectionConfig() {
   const url = process.env.MYSQL_URL || process.env.DATABASE_URL;
 
   if (url && /^mysql:\/\//i.test(url)) {
-    return { uri: url };
+    const sslEnabled =
+      process.env.MYSQL_SSL === 'true' ||
+      url.includes('aivencloud.com') ||
+      /[?&]ssl-mode=required/i.test(url);
+
+    try {
+      const parsedUrl = new URL(url);
+      parsedUrl.searchParams.delete('ssl-mode');
+      return {
+        uri: parsedUrl.toString(),
+        ...(sslEnabled ? { ssl: { rejectUnauthorized: false } } : {}),
+      };
+    } catch {
+      return {
+        uri: url.replace(/([?&])ssl-mode=required&?/i, '$1'),
+        ...(sslEnabled ? { ssl: { rejectUnauthorized: false } } : {}),
+      };
+    }
   }
 
   return {
@@ -17,6 +34,9 @@ function getConnectionConfig() {
     user: process.env.MYSQLUSER || process.env.DB_USERNAME || 'root',
     password: process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || '',
     database: process.env.MYSQLDATABASE || process.env.DB_DATABASE || 'hotel',
+    ...(process.env.MYSQL_SSL === 'true'
+      ? { ssl: { rejectUnauthorized: false } }
+      : {}),
   };
 }
 

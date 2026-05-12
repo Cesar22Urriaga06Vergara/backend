@@ -49,11 +49,29 @@ import { CajaModule } from './caja/caja.module';
           configService.get<string>('MYSQL_URL'),
           configService.get<string>('DATABASE_URL'),
         ].find((url) => url && /^mysql:\/\//i.test(url));
+        const mysqlSslEnabled =
+          configService.get<string>('MYSQL_SSL') === 'true' ||
+          Boolean(databaseUrl?.includes('aivencloud.com')) ||
+          Boolean(databaseUrl?.match(/[?&]ssl-mode=required/i));
+
+        let normalizedDatabaseUrl = databaseUrl;
+        if (databaseUrl) {
+          try {
+            const parsedUrl = new URL(databaseUrl);
+            parsedUrl.searchParams.delete('ssl-mode');
+            normalizedDatabaseUrl = parsedUrl.toString();
+          } catch {
+            normalizedDatabaseUrl = databaseUrl.replace(
+              /([?&])ssl-mode=required&?/i,
+              '$1',
+            );
+          }
+        }
 
         return {
           type: 'mysql',
-          ...(databaseUrl
-            ? { url: databaseUrl }
+          ...(normalizedDatabaseUrl
+            ? { url: normalizedDatabaseUrl }
             : {
                 host:
                   configService.get<string>('MYSQLHOST') ||
@@ -73,6 +91,9 @@ import { CajaModule } from './caja/caja.module';
                   configService.get<string>('MYSQLDATABASE') ||
                   configService.get<string>('DB_DATABASE'),
               }),
+          ...(mysqlSslEnabled
+            ? { ssl: { rejectUnauthorized: false } }
+            : {}),
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize:
             configService.get<string>('TYPEORM_SYNCHRONIZE') === 'true',
