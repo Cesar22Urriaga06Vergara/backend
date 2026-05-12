@@ -41,10 +41,32 @@ function getConnectionConfig() {
 }
 
 function prepareDump(sql) {
-  return sql
+  const tableNames = Array.from(
+    sql.matchAll(/CREATE TABLE IF NOT EXISTS\s+`([^`]+)`/gi),
+    (match) => match[1],
+  );
+  const dropTables = tableNames
+    .map((tableName) => `DROP TABLE IF EXISTS \`${tableName}\`;`)
+    .join('\n');
+
+  const normalizedSql = sql
     .replace(/^\s*CREATE DATABASE\b[^;]*;\s*$/gim, '')
     .replace(/^\s*USE\s+`?[^`;]+`?\s*;\s*$/gim, '')
-    .replace(/^\s*DELIMITER\s+\S+\s*$/gim, '');
+    .replace(/^\s*DELIMITER\s+\S+\s*$/gim, '')
+    .replace(/\bDEFAULT\s+curdate\(\)/gim, 'DEFAULT (curdate())')
+    .replace(
+      /(`[^`]+`\s+(?:longtext|text|json)\b[^,\n]*?)\s+DEFAULT\s+'(?:\[\]|\{\})'([^,\n]*)/gim,
+      '$1$2',
+    );
+
+  return [
+    'SET FOREIGN_KEY_CHECKS=0;',
+    dropTables,
+    normalizedSql,
+    'SET FOREIGN_KEY_CHECKS=1;',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 async function main() {
