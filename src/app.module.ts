@@ -26,6 +26,7 @@ import { AdminAccessMiddleware } from './common/middleware/admin-access.middlewa
 import { FolioModule } from './folio/folio.module';
 import { HuespedesModule } from './huespedes/huespedes.module';
 import { SuperadminModule } from './superadmin/superadmin.module';
+import { CajaModule } from './caja/caja.module';
 
 @Module({
   imports: [
@@ -46,12 +47,13 @@ import { SuperadminModule } from './superadmin/superadmin.module';
       useFactory: (configService: ConfigService) => ({
         type: 'mysql',
         host: configService.get('DB_HOST'),
-        port: +configService.get('DB_PORT'),
+        port: Number(configService.get('DB_PORT') || 3306),
         username: configService.get('DB_USERNAME'),
         password: configService.get('DB_PASSWORD'),
         database: configService.get('DB_DATABASE'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: true,
+        synchronize: configService.get<string>('TYPEORM_SYNCHRONIZE') === 'true',
+        logging: configService.get<string>('TYPEORM_LOGGING') === 'true',
       }),
       inject: [ConfigService],
     }),
@@ -81,6 +83,7 @@ import { SuperadminModule } from './superadmin/superadmin.module';
     FolioModule,
     HuespedesModule,
     SuperadminModule,
+    CajaModule,
 
   ],
   controllers: [AppController],
@@ -98,6 +101,7 @@ export class AppModule implements NestModule {
       '/medios-pago',
       '/tipos-habitacion',
       '/folios',
+      '/caja',
       '/huespedes',
     );
   }

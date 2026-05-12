@@ -1,235 +1,173 @@
-# Hotel Sena 2026 - Backend API
+# ADUS Hospitality OS - Backend
 
-<div align="center">
+API REST del sistema de gestion hotelera ADUS. Expone autenticacion, usuarios,
+hoteles, reservas, check-in/check-out, folios, pagos, caja, facturacion,
+servicios, reportes y administracion de plataforma.
 
-**Backend REST API** para el sistema de gestión hotelera integral Hotel Sena 2026.
+## Stack
 
-Construido con **NestJS**, **TypeORM**, **MySQL** y autenticación con **Passport**.
+- Node.js 18 o superior
+- NestJS 11
+- TypeScript
+- TypeORM
+- MySQL
+- Passport, JWT y Google OAuth
+- Swagger/OpenAPI
+- Jest
 
-[![Node.js](https://img.shields.io/badge/node.js-v18+-brightgreen)](https://nodejs.org/)
-[![NestJS](https://img.shields.io/badge/NestJS-11.0-red)](https://nestjs.com/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)](https://www.typescriptlang.org/)
-[![MySQL](https://img.shields.io/badge/MySQL-8.0+-blue)](https://www.mysql.com/)
-[![License](https://img.shields.io/badge/license-UNLICENSED-red)](#license)
+## Arquitectura
 
-</div>
+La aplicacion esta organizada por modulos NestJS dentro de `src/`.
 
----
-
-## 📋 Descripción
-
-API REST completa para la gestión integral de un hotel, incluyendo:
-
-- 👥 **Gestión de Usuarios y Roles** con RBAC (Control de Acceso Basado en Roles)
-- 🏨 **Administración de Hoteles** y Categorías
-- 📅 **Sistema de Reservas** y Check-in/Check-out
-- 💰 **Facturación** y Gestión de Pagos
-- 📊 **Reportes y KPIs** en tiempo real
-- 📸 **Gestión de Multimedia** con Cloudinary
-- 🔐 **Autenticación OAuth2** con Google
-- 📄 **Generación de Reportes** en Excel y PDF
-
----
-
-## 🚀 Requisitos Previos
-
-- **Node.js** v18+ 
-- **npm** o **yarn**
-- **MySQL** 8.0+
-- **Variables de entorno** configuradas (`.env`)
-
----
-
-## 📦 Instalación
-
-1. **Clonar el repositorio**
-   ```bash
-   git clone <repository-url>
-   cd "Hotel Sena 2026"
-   ```
-
-2. **Instalar dependencias**
-   ```bash
-   npm install
-   ```
-
-3. **Configurar variables de entorno**
-   ```bash
-   cp .env.example .env
-   ```
-   Editar `.env` con las credenciales de base de datos y servicios externos.
-
-4. **Ejecutar migraciones de base de datos**
-   ```bash
-   npm run typeorm migration:run
-   ```
-
----
-
-## 🛠️ Scripts Disponibles
-
-### Desarrollo
-```bash
-# Iniciar en modo desarrollo con hot-reload
-npm run start:dev
-
-# Iniciar en modo debug
-npm run start:debug
-```
-
-### Producción
-```bash
-# Compilar el proyecto
-npm run build
-
-# Ejecutar en producción
-npm run start:prod
-```
-
-### Testing
-```bash
-# Tests unitarios
-npm run test
-
-# Tests con cobertura
-npm run test:cov
-
-# Tests e2e
-npm run test:e2e
-
-# Tests en modo watch
-npm run test:watch
-```
-
-### Calidad de Código
-```bash
-# Lint y fix automático
-npm run lint
-
-# Formatear código con Prettier
-npm run format
-```
-
----
-
-## 📁 Estructura del Proyecto
-
-```
+```text
 src/
-├── modules/              # Módulos de la aplicación
-│   ├── auth/            # Autenticación y autorización
-│   ├── usuarios/        # Gestión de usuarios
-│   ├── hoteles/         # Administración de hoteles
-│   ├── reservas/        # Sistema de reservas
-│   ├── facturacion/     # Módulo de facturación
-│   ├── reportes/        # Generación de reportes
-│   └── servicios/       # Servicios auxiliares
-├── common/              # Guardias, interceptores, decoradores comunes
-├── config/              # Configuración de la aplicación
-├── database/            # Configuración de TypeORM
-├── main.ts              # Punto de entrada
-└── app.module.ts        # Módulo raíz
-
-test/                    # Tests e2e
-scripts/                 # Scripts de base de datos y migraciones
+  app.module.ts
+  main.ts
+  auth/
+  amenidad/
+  caja/
+  categoria-servicios/
+  cliente/
+  cloudinary/
+  common/
+  empleado/
+  factura/
+  folio/
+  habitacion/
+  hotel/
+  huespedes/
+  impuesto/
+  incidencia/
+  medio-pago/
+  pago/
+  reserva/
+  servicio/
+  superadmin/
+  tax-rates/
+  tipo-habitacion/
+test/
+scripts/
 ```
 
----
+`main.ts` inicializa CORS, validacion global, Swagger opcional y el puerto HTTP.
+`app.module.ts` centraliza configuracion, TypeORM y registro de modulos.
 
-## 🔑 Variables de Entorno
+## Instalacion
 
-Crear archivo `.env` con:
+```bash
+npm install
+cp .env.example .env
+```
+
+Edita `.env` con credenciales locales reales. No subas `.env` a Git.
+
+## Variables De Entorno
 
 ```env
-# Base de Datos
+PORT=3001
+NODE_ENV=development
+ENABLE_SWAGGER=true
+
 DB_HOST=localhost
 DB_PORT=3306
 DB_USERNAME=root
-DB_PASSWORD=password
-DB_NAME=hotel_sena
+DB_PASSWORD=tu_password_aqui
+DB_DATABASE=hotel
+TYPEORM_SYNCHRONIZE=false
+TYPEORM_LOGGING=false
 
-# JWT
-JWT_SECRET=your_secret_key
-JWT_EXPIRATION=3600
+JWT_SECRET=cambia_esto_por_un_secreto_largo_y_unico
+JWT_EXPIRATION=1h
 
-# Google OAuth
-GOOGLE_CLIENT_ID=your_client_id
-GOOGLE_CLIENT_SECRET=your_client_secret
+CLOUDINARY_CLOUD_NAME=tu_cloud_name
+CLOUDINARY_API_KEY=tu_api_key
+CLOUDINARY_API_SECRET=tu_api_secret
+CLOUDINARY_FOLDER_NAME=imghotel
 
-# Cloudinary
-CLOUDINARY_NAME=your_name
-CLOUDINARY_API_KEY=your_key
-CLOUDINARY_API_SECRET=your_secret
+CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
-# Puerto
-PORT=3000
+GOOGLE_CLIENT_ID=tu_google_client_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=tu_google_client_secret
+GOOGLE_CALLBACK_URL=http://localhost:3001/auth/google/callback
 ```
 
----
+## Scripts
 
-## 📚 Documentación API
-
-Una vez ejecutando el servidor, accede a la documentación Swagger:
-
-```
-http://localhost:3000/api/docs
-```
-
----
-
-## 🗄️ Base de Datos
-
-### Migraciones
 ```bash
-# Crear nueva migración
-npm run typeorm migration:create
-
-# Ejecutar migraciones
-npm run typeorm migration:run
-
-# Revertir última migración
-npm run typeorm migration:revert
+npm run start        # Ejecuta Nest en modo normal
+npm run start:dev    # Desarrollo con watch
+npm run start:debug  # Debug con watch
+npm run build        # Compila a dist/
+npm run start:prod   # Ejecuta dist/main
+npm run test         # Tests unitarios
+npm run test:watch   # Tests en watch
+npm run test:cov     # Cobertura
+npm run test:e2e     # Tests e2e
+npm run lint         # ESLint con fix
+npm run format       # Prettier
 ```
 
-### Seeders
+## Ejecucion Local
+
+1. Inicia MySQL y crea/configura la base definida en `DB_DATABASE`.
+2. Configura `.env`.
+3. Ejecuta:
+
 ```bash
-# Ejecutar seeders
-npm run seed
+npm run start:dev
 ```
 
----
+La API queda disponible en:
 
-## 🔐 Autenticación
+```text
+http://localhost:3001
+```
 
-- **JWT Bearer Token** para API
-- **Google OAuth2** para usuarios
-- **RBAC** para control de acceso basado en roles
+Si `ENABLE_SWAGGER=true`, la documentacion queda en:
 
----
+```text
+http://localhost:3001/api/docs
+```
 
-## 📊 Características Principales
+## Produccion
 
-- ✅ Gestión completa de usuarios con roles
-- ✅ Sistema de reservas con validaciones
-- ✅ Facturación automatizada
-- ✅ Reportes en múltiples formatos
-- ✅ Integración con Cloudinary para imágenes
-- ✅ Swagger/OpenAPI documentación
-- ✅ Validación con class-validator
-- ✅ Manejo de errores centralizado
+```bash
+npm run build
+npm run start:prod
+```
 
----
+Para produccion:
 
-## 🤝 Contribuir
+- Usa `NODE_ENV=production`.
+- Usa un `JWT_SECRET` largo, unico y privado.
+- Manten `TYPEORM_SYNCHRONIZE=false`.
+- Define `CORS_ORIGINS` con dominios permitidos reales.
+- Configura secretos desde el proveedor de despliegue, no desde archivos versionados.
+- Desactiva Swagger si no debe exponerse publicamente.
 
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
+## Seguridad
 
----
+- `.env`, logs, builds, caches, certificados y llaves privadas estan ignorados por Git.
+- `.env.example` debe contener solo placeholders.
+- No guardes tokens, API keys, passwords reales ni certificados dentro del repositorio.
+- Los scripts de seed/migracion deben ejecutarse solo con variables de entorno controladas.
+- Rota cualquier credencial demo antes de usar entornos compartidos o productivos.
 
-## 📄 Licencia
+## Troubleshooting
 
-Este proyecto es **UNLICENSED** y es propiedad privada.
+- `EADDRINUSE: 3001`: ya hay otro backend escuchando. Deten el proceso o cambia `PORT`.
+- Error de conexion MySQL: revisa `DB_HOST`, `DB_PORT`, `DB_USERNAME`, `DB_PASSWORD` y `DB_DATABASE`.
+- CORS en frontend: agrega el origen exacto a `CORS_ORIGINS`.
+- Swagger no aparece: confirma `ENABLE_SWAGGER=true`.
+
+## Convenciones
+
+- Mantener la logica de negocio dentro de servicios NestJS.
+- Mantener DTOs y validaciones por modulo.
+- No subir archivos generados (`dist`, `coverage`, logs).
+- Documentar nuevas variables en `.env.example`.
+- Ejecutar build y tests antes de integrar cambios.
+
+## Licencia
+
+Proyecto privado sin licencia publica declarada.

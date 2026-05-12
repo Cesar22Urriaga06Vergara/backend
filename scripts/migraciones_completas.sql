@@ -1122,7 +1122,7 @@ VALUES
   (71, 1, 'Solicitud mantenimiento', 'Reporte de daño o solicitud de reparación', 'mantenimiento', 10, 0, 0.00, 'servicio', NULL, 1, 0, 1, NOW(), NOW());
 
 -- ─── 7. Empleados demo para cada área nueva ──────────────────────────────────
--- Contraseña: sena2026 (mismo hash que cafeteria)
+-- Password seed: rotar antes de usar fuera de local
 INSERT IGNORE INTO `empleados`
   (`id`, `id_hotel`, `cedula`, `nombre`, `apellido`, `email`, `password`, `rol`, `tax_profile`, `estado`, `createdAt`, `updatedAt`)
 VALUES
@@ -1143,8 +1143,8 @@ ORDER BY categoria;
 -- ========================================
 -- Script de creación de usuarios por área
 -- Fecha: 2026-04-05
--- Contraseña para todos: 123456789
--- Hash bcrypt: $2b$10$NXVLWoOYQJ2ydkrSLTPWMOljida0nAXDtXymq8dg2AbSoqci42eI6
+-- Password seed: rotar antes de usar fuera de local
+-- Hash bcrypt seed incluido por compatibilidad con datos demo
 -- ========================================
 
 USE hotel;

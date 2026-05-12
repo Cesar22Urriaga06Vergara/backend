@@ -3,8 +3,10 @@ import { EventEmitter2, OnEvent as OnEventDecorator } from '@nestjs/event-emitte
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
 import { randomUUID } from 'crypto';
+import PDFDocument from 'pdfkit';
 import { Factura } from './entities/factura.entity';
 import { DetalleFactura } from './entities/detalle-factura.entity';
+import { FacturaReimpresion } from './entities/factura-reimpresion.entity';
 import { CreateFacturaDto } from './dto/create-factura.dto';
 import { UpdateFacturaDto } from './dto/update-factura.dto';
 import { ReservaService } from '../reserva/reserva.service';
@@ -18,6 +20,8 @@ import { HotelService } from '../hotel/hotel.service';
 import { Hotel } from '../hotel/entities/hotel.entity';
 import { CategoriaServicio } from '../categoria-servicios/entities/categoria-servicio.entity';
 import { IntegridadService } from './integridad.service';
+import { ResolucionesFacturacionService } from './resoluciones/resoluciones-facturacion.service';
+import { ResolucionFacturacion } from './resoluciones/entities/resolucion-facturacion.entity';
 import { ESTADOS_FACTURA, TRANSICIONES_FACTURA, EstadoFactura } from '../common/constants/estados.constants';
 import {
   PedidoCreiadoEvent,
@@ -34,6 +38,8 @@ export class FacturaService {
     private facturaRepository: Repository<Factura>,
     @InjectRepository(DetalleFactura)
     private detalleFacturaRepository: Repository<DetalleFactura>,
+    @InjectRepository(FacturaReimpresion)
+    private reimpresionRepository: Repository<FacturaReimpresion>,
     @InjectRepository(Pedido)
     private pedidoRepository: Repository<Pedido>,
     @InjectRepository(PedidoItem)
@@ -51,6 +57,7 @@ export class FacturaService {
     private clienteService: ClienteService,
     private hotelService: HotelService,
     private integridadService: IntegridadService,
+    private resolucionesFacturacionService: ResolucionesFacturacionService,
   ) {}
 
   /**
@@ -124,7 +131,7 @@ export class FacturaService {
       }
 
       desgloseMonetario[categoriaNombre].subtotal = parseFloat(
-        (desgloseMonetario[categoriaNombre].subtotal + Number(detalle.subtotal || 0)).toFixed(2),
+        (desgloseMonetario[categoriaNombre].subtotal + Number((tax as any).baseGravable ?? detalle.subtotal ?? 0)).toFixed(2),
       );
       desgloseMonetario[categoriaNombre].iva = parseFloat(
         (desgloseMonetario[categoriaNombre].iva + tax.iva).toFixed(2),
@@ -185,8 +192,12 @@ export class FacturaService {
     }
 
     try {
-      // Generar número de factura dentro de la transacción
-      const numeroFactura = await this.generarNumeroFactura();
+      // Reservar consecutivo de la resolucion activa dentro de la transaccion.
+      const numeracion = await this.resolucionesFacturacionService.reservarConsecutivo(
+        reserva.idHotel,
+        queryRunner.manager,
+      );
+      const numeroFactura = numeracion.numeroFactura;
 
       // Calcular número de noches
       const checkin = reserva.checkinReal || reserva.checkinPrevisto;
@@ -303,7 +314,8 @@ export class FacturaService {
           porcentajeIncAplicado = Number(incRate.tasaPorcentaje);
         }
 
-        // FIX: reflejar impuestos reales de la línea
+        // Reflejar impuestos incluidos y base gravable real de la línea.
+        detalle.subtotal = (tax as any).baseGravable ?? detalle.subtotal;
         (detalle as any).montoIva = tax.iva;
         detalle.montoInc = tax.inc;
         detalle.porcentajeInc = incRate ? Number(incRate.tasaPorcentaje) : undefined;
@@ -344,7 +356,7 @@ export class FacturaService {
       }
 
       const subtotalTotal = detalles.reduce((sum, d) => sum + (d.subtotal || 0), 0);
-      const total = parseFloat((subtotalTotal + montoIvaTotal + montoIncTotal).toFixed(2));
+      const total = parseFloat(detalles.reduce((sum, d) => sum + Number(d.total || 0), 0).toFixed(2));
 
       // Crear factura con valores calculados correctamente
       const factura = new Factura();
@@ -356,6 +368,10 @@ export class FacturaService {
       factura.cedulaCliente = reserva.cedulaCliente;
       factura.emailCliente = reserva.emailCliente;
       factura.idHotel = reserva.idHotel;
+      factura.idResolucionFacturacion = numeracion.resolucion.id;
+      factura.prefijoFactura = numeracion.resolucion.prefijo;
+      factura.consecutivoFactura = numeracion.consecutivo;
+      factura.resolucionNumero = numeracion.resolucion.numeroResolucion;
       factura.subtotal = subtotalTotal;
       factura.montoIva = montoIvaTotal;
       factura.porcentajeIva = porcentajeIvaAplicado ?? 0;
@@ -373,6 +389,15 @@ export class FacturaService {
       // JSON para almacenamiento
       factura.jsonData = JSON.stringify({
         numeroFactura,
+        resolucionFacturacion: {
+          id: numeracion.resolucion.id,
+          numero: numeracion.resolucion.numeroResolucion,
+          prefijo: numeracion.resolucion.prefijo,
+          consecutivo: numeracion.consecutivo,
+          rangoDesde: numeracion.resolucion.rangoDesde,
+          rangoHasta: numeracion.resolucion.rangoHasta,
+          ambiente: numeracion.resolucion.ambiente,
+        },
         uuid: factura.uuid,
         cliente: {
           nombre: reserva.nombreCliente,
@@ -384,7 +409,8 @@ export class FacturaService {
           descripcion: d.descripcion,
           cantidad: d.cantidad,
           precioUnitario: d.precioUnitario,
-          subtotal: d.subtotal,
+          baseGravable: d.subtotal,
+          precioFinal: d.total,
           iva: (d as any).montoIva || 0,
           inc: d.montoInc || 0,
           total: d.total,
@@ -414,7 +440,7 @@ export class FacturaService {
         porcentajeIva: factura.porcentajeIva || 0,
         montoIva: montoIvaTotal,
         total,
-      });
+      }, numeracion.resolucion);
 
       // 5. Guardar factura y detalles
       const facturaGuardada = await queryRunner.manager.save(factura);
@@ -581,6 +607,224 @@ export class FacturaService {
     return categorias[categoriaId] || `Categoría ${categoriaId}`;
   }
 
+  private normalizarMonto(value: unknown): number {
+    const parsed = Number(value ?? 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  /**
+   * Generar payload normalizado para vista previa e impresion POS/termica.
+   * La generacion PDF/ESC-POS real debe vivir en adaptadores separados.
+   */
+  async generarTicketPos(
+    id: number,
+    formato: '58mm' | '80mm' = '80mm',
+  ): Promise<any> {
+    const factura = await this.findOne(id);
+    const hotel = await this.hotelService.findOne(factura.idHotel);
+    const detalles = factura.detalles || [];
+    const pagos = factura.pagos || [];
+
+    const totalPagado = pagos
+      .filter((p: any) => String(p.estado || 'completado').toLowerCase() === 'completado')
+      .reduce((sum: number, pago: any) => sum + this.normalizarMonto(pago.monto), 0);
+
+    const descuentoTotal = detalles.reduce(
+      (sum: number, detalle: any) => sum + this.normalizarMonto(detalle.descuento),
+      0,
+    );
+
+    const reserva: any = factura.reserva || {};
+
+    return {
+      formato,
+      widthMm: formato === '58mm' ? 58 : 80,
+      generadoEn: new Date().toISOString(),
+      hotel: {
+        id: hotel.id,
+        nombre: hotel.nombre,
+        nit: hotel.nit,
+        direccion: hotel.direccion,
+        ciudad: hotel.ciudad,
+        telefono: hotel.telefono,
+        email: hotel.email,
+        logoUrl: (hotel as any).logoUrl || null,
+        resolucionDian: factura.resolucionNumero || (hotel as any).resolucionFacturacion || null,
+        prefijoFacturacion: factura.prefijoFactura || (hotel as any).prefijoFacturacion || null,
+        pieFactura: (hotel as any).pieFactura || null,
+        moneda: (hotel as any).moneda || 'COP',
+      },
+      factura: {
+        id: factura.id,
+        numeroFactura: factura.numeroFactura,
+        estadoFactura: factura.estadoFactura,
+        fechaEmision: factura.fechaEmision,
+        fechaCreacion: factura.createdAt,
+        cufe: factura.cufe || null,
+        uuid: factura.uuid || null,
+        idResolucionFacturacion: factura.idResolucionFacturacion || null,
+        prefijoFactura: factura.prefijoFactura || null,
+        consecutivoFactura: factura.consecutivoFactura || null,
+        resolucionNumero: factura.resolucionNumero || null,
+      },
+      estancia: {
+        idReserva: factura.idReserva,
+        habitacion: reserva.habitacion?.numeroHabitacion || reserva.idHabitacion || undefined,
+        huesped: factura.nombreCliente,
+        documento: factura.cedulaCliente,
+        email: factura.emailCliente,
+      },
+      detalles: detalles.map((detalle: any) => ({
+        descripcion: detalle.descripcion,
+        cantidad: this.normalizarMonto(detalle.cantidad),
+        precioUnitario: this.normalizarMonto(detalle.precioUnitario),
+        subtotal: this.normalizarMonto(detalle.subtotal),
+        descuento: this.normalizarMonto(detalle.descuento),
+        iva: this.normalizarMonto(detalle.montoIva),
+        inc: this.normalizarMonto(detalle.montoInc),
+        total: this.normalizarMonto(detalle.total),
+      })),
+      totales: {
+        subtotal: this.normalizarMonto(factura.subtotal),
+        descuento: descuentoTotal,
+        iva: this.normalizarMonto(factura.montoIva),
+        inc: this.normalizarMonto(factura.montoInc),
+        total: this.normalizarMonto(factura.total),
+        pagado: totalPagado,
+        saldo: Math.max(0, this.normalizarMonto(factura.total) - totalPagado),
+      },
+      pagos: pagos.map((pago: any) => ({
+        metodo: pago.medioPago?.nombre || pago.metodoPago || 'Pago',
+        monto: this.normalizarMonto(pago.monto),
+        estado: pago.estado || 'completado',
+        fecha: pago.fechaPago,
+      })),
+      qrData: factura.cufe || factura.uuid || factura.numeroFactura,
+    };
+  }
+
+  private async registrarReimpresion(
+    idFactura: number,
+    meta: {
+      idUsuario?: number | null;
+      usuarioRol?: string | null;
+      formato: 'ticket_pos' | 'pdf_pos' | 'pdf_a4';
+      tamanoPos?: '58mm' | '80mm' | null;
+      motivo?: string | null;
+      ipOrigen?: string | null;
+      userAgent?: string | null;
+    },
+  ) {
+    const reimpresion = this.reimpresionRepository.create({
+      idFactura,
+      idUsuario: meta.idUsuario || null,
+      usuarioRol: meta.usuarioRol || null,
+      formato: meta.formato,
+      tamanoPos: meta.tamanoPos || null,
+      motivo: meta.motivo || null,
+      ipOrigen: meta.ipOrigen || null,
+      userAgent: meta.userAgent || null,
+    });
+
+    return this.reimpresionRepository.save(reimpresion);
+  }
+
+  async listarReimpresiones(idFactura: number) {
+    await this.findOne(idFactura);
+    return this.reimpresionRepository.find({
+      where: { idFactura },
+      order: { createdAt: 'DESC' },
+      take: 100,
+    });
+  }
+
+  async generarTicketPosPdf(
+    id: number,
+    formato: '58mm' | '80mm' = '80mm',
+    meta: {
+      idUsuario?: number | null;
+      usuarioRol?: string | null;
+      motivo?: string | null;
+      ipOrigen?: string | null;
+      userAgent?: string | null;
+    } = {},
+  ): Promise<Buffer> {
+    const ticket = await this.generarTicketPos(id, formato);
+    await this.registrarReimpresion(id, {
+      ...meta,
+      formato: 'pdf_pos',
+      tamanoPos: formato,
+    });
+
+    const width = formato === '58mm' ? 164 : 226;
+    const height = 820;
+    const margin = 10;
+
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: [width, height], margin });
+      const chunks: Buffer[] = [];
+
+      doc.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const money = (value: number) => `$${Number(value || 0).toLocaleString('es-CO')}`;
+      const line = () => {
+        doc.moveTo(margin, doc.y).lineTo(width - margin, doc.y).strokeColor('#999').stroke();
+        doc.moveDown(0.4);
+      };
+
+      doc.font('Helvetica-Bold').fontSize(formato === '58mm' ? 9 : 11).text(ticket.hotel.nombre || 'Hotel', { align: 'center' });
+      if (ticket.hotel.nit) doc.font('Helvetica').fontSize(7).text(`NIT: ${ticket.hotel.nit}`, { align: 'center' });
+      if (ticket.hotel.direccion) doc.text(ticket.hotel.direccion, { align: 'center' });
+      if (ticket.hotel.telefono) doc.text(`Tel: ${ticket.hotel.telefono}`, { align: 'center' });
+      if (ticket.hotel.resolucionDian) doc.text(`Resolucion: ${ticket.hotel.resolucionDian}`, { align: 'center' });
+      doc.moveDown(0.5);
+      line();
+
+      doc.font('Helvetica-Bold').fontSize(8).text(`Factura ${ticket.factura.numeroFactura}`);
+      doc.font('Helvetica').fontSize(7).text(`Fecha: ${new Date(ticket.factura.fechaEmision || ticket.generadoEn).toLocaleString('es-CO')}`);
+      if (ticket.estancia.habitacion) doc.text(`Habitacion: ${ticket.estancia.habitacion}`);
+      doc.text(`Huesped: ${ticket.estancia.huesped || 'N/A'}`);
+      if (ticket.estancia.documento) doc.text(`Doc: ${ticket.estancia.documento}`);
+      doc.moveDown(0.4);
+      line();
+
+      ticket.detalles.forEach((detalle) => {
+        doc.font('Helvetica').fontSize(7).text(String(detalle.descripcion || 'Concepto'), { width: width - margin * 2 });
+        doc.text(`${detalle.cantidad} x ${money(detalle.precioUnitario)}`, { continued: true });
+        doc.text(money(detalle.total), { align: 'right' });
+        doc.moveDown(0.2);
+      });
+
+      line();
+      doc.font('Helvetica').fontSize(7);
+      doc.text(`Subtotal: ${money(ticket.totales.subtotal)}`, { align: 'right' });
+      if (ticket.totales.descuento) doc.text(`Descuento: ${money(ticket.totales.descuento)}`, { align: 'right' });
+      doc.text(`IVA incluido: ${money(ticket.totales.iva)}`, { align: 'right' });
+      if (ticket.totales.inc) doc.text(`INC incluido: ${money(ticket.totales.inc)}`, { align: 'right' });
+      doc.font('Helvetica-Bold').fontSize(9).text(`TOTAL: ${money(ticket.totales.total)}`, { align: 'right' });
+      doc.font('Helvetica').fontSize(7).text(`Pagado: ${money(ticket.totales.pagado)}`, { align: 'right' });
+      doc.text(`Saldo: ${money(ticket.totales.saldo)}`, { align: 'right' });
+
+      if (ticket.pagos.length) {
+        doc.moveDown(0.4);
+        line();
+        doc.font('Helvetica-Bold').fontSize(8).text('Pagos');
+        ticket.pagos.forEach((pago) => {
+          doc.font('Helvetica').fontSize(7).text(`${pago.metodo}: ${money(pago.monto)}`);
+        });
+      }
+
+      doc.moveDown(0.5);
+      if (ticket.qrData) doc.font('Helvetica').fontSize(6).text(`QR/Data: ${ticket.qrData}`, { align: 'center' });
+      if (ticket.hotel.pieFactura) doc.font('Helvetica').fontSize(7).text(ticket.hotel.pieFactura, { align: 'center' });
+      doc.moveDown(0.4);
+      doc.font('Helvetica').fontSize(6).text('Documento generado por ADUS Hospitality OS', { align: 'center' });
+
+      doc.end();
+    });
+  }
   /**
    * Obtener todas las facturas de un cliente
    */
@@ -1048,8 +1292,8 @@ export class FacturaService {
       }
     }
 
-    // Calcular subtotal y totales
-    const subtotal = cantidad * precioUnitario;
+    // El precio unitario recibido es precio final; se separa base/impuesto incluido.
+    let subtotal = cantidad * precioUnitario;
     const descuento = 0; // Inicializar con 0, se puede actualizar luego
     
     // Calcular impuestos
@@ -1071,16 +1315,17 @@ export class FacturaService {
       const ivaRate = tax.appliedTaxes.find((t) => t.tipoImpuesto === 'IVA');
       const incRate = tax.appliedTaxes.find((t) => t.tipoImpuesto === 'INC');
 
+      subtotal = tax.baseGravable;
       if (ivaRate) {
-        montoIva = (subtotal * Number(ivaRate.tasaPorcentaje)) / 100;
+        montoIva = tax.iva;
       }
       if (incRate) {
         porcentajeInc = Number(incRate.tasaPorcentaje);
-        montoInc = (subtotal * porcentajeInc) / 100;
+        montoInc = tax.inc;
       }
     }
 
-    const total = subtotal + montoIva + montoInc - descuento;
+    const total = (subtotal + montoIva + montoInc) - descuento;
 
     // Crear nuevo detalle
     const detalle = this.detalleFacturaRepository.create({
@@ -1483,7 +1728,7 @@ export class FacturaService {
       .select('COUNT(*)', 'cantidad')
       .addSelect('SUM(f.total)', 'monto')
       .where('f.idHotel = :hotelId', { hotelId })
-      .andWhere('f.estadoFactura IN (:...estados)', { estados: ['EMITIDA', 'PAGADA'] })
+      .andWhere('f.estadoFactura IN (:...estados)', { estados: ['EMITIDA'] })
       .getRawOne();
 
     // Huéspedes sin facturar (reservas activas sin factura)
@@ -1606,7 +1851,7 @@ export class FacturaService {
       .addSelect('COUNT(*)', 'cantidad')
       .addSelect('SUM(f.total)', 'monto')
       .where('f.idHotel = :hotelId', { hotelId })
-      .where('f.estadoFactura IN (:...estados)', { estados: ['EMITIDA', 'PAGADA'] })
+      .andWhere('f.estadoFactura IN (:...estados)', { estados: ['EMITIDA', 'PAGADA'] })
       .groupBy('estado')
       .getRawMany();
 
@@ -1638,12 +1883,20 @@ export class FacturaService {
 
       if (!factura) {
         // Si no existe, crearla
-        const numeroFactura = await this.generarNumeroFactura();
+        const numeracion = await this.resolucionesFacturacionService.reservarConsecutivo(
+          payload.idHotel,
+          this.facturaRepository.manager,
+        );
+        const numeroFactura = numeracion.numeroFactura;
         factura = this.facturaRepository.create({
           numeroFactura,
           idReserva: payload.idReserva,
           idCliente: payload.idCliente,
           idHotel: payload.idHotel,
+          idResolucionFacturacion: numeracion.resolucion.id,
+          prefijoFactura: numeracion.resolucion.prefijo,
+          consecutivoFactura: numeracion.consecutivo,
+          resolucionNumero: numeracion.resolucion.numeroResolucion,
           estadoFactura: 'BORRADOR',
           estado: 'borrador',
           subtotal: 0,
@@ -1844,13 +2097,12 @@ export class FacturaService {
     detalles: Partial<any>[],
     hotel: Hotel,
     montos: { subtotal: number; porcentajeIva: number; montoIva: number; total: number },
+    resolucion?: ResolucionFacturacion,
   ): string {
     const fecha = new Date().toISOString().split('T')[0];
     const hora = new Date().toISOString().split('T')[1].split('.')[0];
-
-    // Formatear número de factura con serie
-    const seriePrefix = 'FV'; // FV = Factura de Venta
-    const numeroFormateado = `${seriePrefix}-${String(numeroFactura).padStart(8, '0')}`;
+    const numeroFormateado = numeroFactura;
+    const resolucionTexto = resolucion?.numeroResolucion || (hotel as any).resolucionFacturacion || 'Sin resolucion configurada';
 
     const detallesXml = detalles
       .map(
@@ -1969,7 +2221,7 @@ export class FacturaService {
   ${detallesXml}
   
   <!-- NOTAS -->
-  <cbc:Note>Documento generado electrónicamente según resolución DIAN</cbc:Note>
+  <cbc:Note>Resolucion de facturacion: ${resolucionTexto}</cbc:Note>
   <cbc:Note>⚠️ DOCUMENTO SIMULADO - No es válido fiscalmente sin Firma Digital XMLDSIG y certificado DIAN</cbc:Note>
 </Invoice>`;
   }

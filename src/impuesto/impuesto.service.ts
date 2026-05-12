@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TaxRate } from 'src/tax-rates/entities/tax-rate.entity';
+import { calculateIncludedPercentageAmount, calculatePercentageAmount, roundMoney } from 'src/common/utils/money.util';
 
 export interface TaxCalculationResult {
   iva: number;
@@ -35,6 +36,8 @@ export interface LineaImpuestosResult {
   iva: number;
   inc: number;
   total: number;
+  baseGravable: number;
+  precioIncluyeImpuestos: boolean;
   appliedTaxes: Array<{
     tipoImpuesto: 'IVA' | 'INC' | 'OTROS';
     tasaPorcentaje: number;
@@ -92,16 +95,16 @@ export class ImpuestoService {
    * Calcula el monto de un impuesto específico
    */
   calculateTaxAmount(baseAmount: number, taxPercentage: number): number {
-    return parseFloat(((baseAmount * taxPercentage) / 100).toFixed(2));
+    return calculatePercentageAmount(baseAmount, taxPercentage);
   }
 
   // FIX: Cálculo tributario por línea (item), sin agregación previa por categoría
   async calculateLineaImpuestos(
     input: LineaImpuestosInput,
   ): Promise<LineaImpuestosResult> {
-    const subtotal = Number(input.subtotal || 0);
-    if (subtotal < 0) {
-      throw new BadRequestException('El subtotal de la línea no puede ser negativo');
+    const totalLinea = roundMoney(input.subtotal);
+    if (totalLinea < 0) {
+      throw new BadRequestException('El total de la linea no puede ser negativo');
     }
 
     const taxRates = await this.getTaxRatesForCategoria(
@@ -112,15 +115,19 @@ export class ImpuestoService {
 
     let iva = 0;
     let inc = 0;
+    let baseGravable = totalLinea;
     const appliedTaxes: LineaImpuestosResult['appliedTaxes'] = [];
 
     for (const rate of taxRates) {
-      const monto = this.calculateTaxAmount(subtotal, Number(rate.tasaPorcentaje));
+      const included = calculateIncludedPercentageAmount(totalLinea, Number(rate.tasaPorcentaje));
+      const monto = included.tax;
 
       if (rate.tipoImpuesto === 'IVA') {
-        iva = parseFloat((iva + monto).toFixed(2));
+        iva = roundMoney(iva + monto);
+        baseGravable = included.base;
       } else if (rate.tipoImpuesto === 'INC') {
-        inc = parseFloat((inc + monto).toFixed(2));
+        inc = roundMoney(inc + monto);
+        baseGravable = included.base;
       }
 
       appliedTaxes.push({
@@ -130,19 +137,18 @@ export class ImpuestoService {
       });
     }
 
-    // FIX: Validación explícita de conflicto tributario en una misma línea
     if (iva > 0 && inc > 0) {
       throw new BadRequestException(
-        `Conflicto tributario en línea (categoría ${input.categoriaServiciosId}): no se permite aplicar IVA e INC simultáneamente`,
+        `Conflicto tributario en linea (categoria ${input.categoriaServiciosId}): no se permite aplicar IVA e INC simultaneamente`,
       );
     }
 
-    const total = parseFloat((subtotal + iva + inc).toFixed(2));
-
     return {
-      iva: parseFloat(iva.toFixed(2)),
-      inc: parseFloat(inc.toFixed(2)),
-      total,
+      iva: roundMoney(iva),
+      inc: roundMoney(inc),
+      total: totalLinea,
+      baseGravable: roundMoney(baseGravable),
+      precioIncluyeImpuestos: true,
       appliedTaxes,
     };
   }
@@ -173,9 +179,9 @@ export class ImpuestoService {
       .reduce((sum, t) => sum + Number(t.monto), 0);
 
     return {
-      iva: parseFloat(linea.iva.toFixed(2)),
-      inc: parseFloat(linea.inc.toFixed(2)),
-      otros: parseFloat(otros.toFixed(2)),
+      iva: roundMoney(linea.iva),
+      inc: roundMoney(linea.inc),
+      otros: roundMoney(otros),
     };
   }
 
@@ -227,49 +233,45 @@ export class ImpuestoService {
         };
       }
 
-      result.subtotalPorCategoria[categoriaNombre].monto = parseFloat(
-        (result.subtotalPorCategoria[categoriaNombre].monto + Number(detalle.subtotal)).toFixed(2),
+      result.subtotalPorCategoria[categoriaNombre].monto = roundMoney(
+        result.subtotalPorCategoria[categoriaNombre].monto + Number(detalle.subtotal),
       );
-      result.subtotalPorCategoria[categoriaNombre].iva = parseFloat(
-        (result.subtotalPorCategoria[categoriaNombre].iva + linea.iva).toFixed(2),
+      result.subtotalPorCategoria[categoriaNombre].iva = roundMoney(
+        result.subtotalPorCategoria[categoriaNombre].iva + linea.iva,
       );
-      result.subtotalPorCategoria[categoriaNombre].inc = parseFloat(
-        (result.subtotalPorCategoria[categoriaNombre].inc + linea.inc).toFixed(2),
+      result.subtotalPorCategoria[categoriaNombre].inc = roundMoney(
+        result.subtotalPorCategoria[categoriaNombre].inc + linea.inc,
       );
 
       const otrosLinea = linea.appliedTaxes
         .filter((t) => t.tipoImpuesto === 'OTROS')
         .reduce((sum, t) => sum + Number(t.monto), 0);
 
-      result.subtotalPorCategoria[categoriaNombre].otros = parseFloat(
-        (result.subtotalPorCategoria[categoriaNombre].otros + otrosLinea).toFixed(2),
+      result.subtotalPorCategoria[categoriaNombre].otros = roundMoney(
+        result.subtotalPorCategoria[categoriaNombre].otros + otrosLinea,
       );
-      result.subtotalPorCategoria[categoriaNombre].total = parseFloat(
-        (
-          result.subtotalPorCategoria[categoriaNombre].monto +
+      result.subtotalPorCategoria[categoriaNombre].total = roundMoney(
+        result.subtotalPorCategoria[categoriaNombre].monto +
           result.subtotalPorCategoria[categoriaNombre].iva +
           result.subtotalPorCategoria[categoriaNombre].inc +
-          result.subtotalPorCategoria[categoriaNombre].otros
-        ).toFixed(2),
+          result.subtotalPorCategoria[categoriaNombre].otros,
       );
 
-      result.iva = parseFloat((result.iva + linea.iva).toFixed(2));
-      result.inc = parseFloat((result.inc + linea.inc).toFixed(2));
-      result.otros = parseFloat((result.otros + otrosLinea).toFixed(2));
+      result.iva = roundMoney(result.iva + linea.iva);
+      result.inc = roundMoney(result.inc + linea.inc);
+      result.otros = roundMoney(result.otros + otrosLinea);
     }
 
     // Calcular totales
     const subtotalTotal = detalles.reduce((sum, d) => sum + d.subtotal, 0);
-    result.totales.ivaTotal = parseFloat(result.iva.toFixed(2));
-    result.totales.incTotal = parseFloat(result.inc.toFixed(2));
-    result.totales.otrosTotal = parseFloat(result.otros.toFixed(2));
-    result.totales.total = parseFloat(
-      (
-        subtotalTotal +
+    result.totales.ivaTotal = roundMoney(result.iva);
+    result.totales.incTotal = roundMoney(result.inc);
+    result.totales.otrosTotal = roundMoney(result.otros);
+    result.totales.total = roundMoney(
+      subtotalTotal +
         result.totales.ivaTotal +
         result.totales.incTotal +
-        result.totales.otrosTotal
-      ).toFixed(2),
+        result.totales.otrosTotal,
     );
 
     return result;

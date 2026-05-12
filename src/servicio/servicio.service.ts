@@ -491,13 +491,17 @@ export class ServicioService {
   async getEstadisticasPedidos(idHotel: number, periodo?: 'mes_actual' | 'trimestre_actual' | 'anio_actual'): Promise<any> {
     const query = this.pedidoRepository
       .createQueryBuilder('pedido')
-      .leftJoinAndSelect('pedido.items', 'items')
-      .where('pedido.id_hotel = :idHotel', { idHotel });
+      .select('pedido.estado_pedido', 'estado')
+      .addSelect('COALESCE(pedido.categoria, :sinCategoria)', 'categoria')
+      .addSelect('COUNT(*)', 'cantidad')
+      .addSelect('COALESCE(SUM(pedido.total_pedido), 0)', 'ingresos')
+      .where('pedido.id_hotel = :idHotel', { idHotel, sinCategoria: 'sin_categoria' })
+      .groupBy('pedido.estado_pedido')
+      .addGroupBy('pedido.categoria');
 
-    // Filtrar por período si es especificado
     if (periodo) {
       const ahora = new Date();
-      let fechaInicio = new Date();
+      let fechaInicio = new Date(0);
 
       if (periodo === 'mes_actual') {
         fechaInicio = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
@@ -508,62 +512,63 @@ export class ServicioService {
         fechaInicio = new Date(ahora.getFullYear(), 0, 1);
       }
 
-      query.andWhere('pedido.fechaPedido >= :fechaInicio', { fechaInicio });
+      query.andWhere('pedido.fecha_pedido >= :fechaInicio', { fechaInicio });
     }
 
-    const pedidos = await query.getMany();
+    const rows = await query.getRawMany<{
+      estado: string;
+      categoria: string;
+      cantidad: string;
+      ingresos: string;
+    }>();
 
-    // Calcular estadísticas
-    const total = pedidos.length;
-    const entregados = pedidos.filter(p => p.estadoPedido === 'entregado').length;
-    const pendientes = pedidos.filter(p => p.estadoPedido === 'pendiente').length;
-    const en_preparacion = pedidos.filter(p => p.estadoPedido === 'en_preparacion').length;
-    const cancelados = pedidos.filter(p => p.estadoPedido === 'cancelado').length;
-
-    // Calcular ingresos brutos y distribuir por categoría
+    const estados = {
+      entregado: 0,
+      pendiente: 0,
+      en_preparacion: 0,
+      cancelado: 0,
+    };
     const ingresoBrutoPorCategoria: Record<string, number> = {};
+    let total = 0;
     let ingresosBrutos = 0;
 
-    for (const pedido of pedidos) {
-      if (['entregado', 'en_preparacion'].includes(pedido.estadoPedido)) {
-        const totalPedido = pedido.totalPedido || 0;
-        ingresosBrutos += totalPedido;
+    for (const row of rows) {
+      const estado = String(row.estado || '').toLowerCase();
+      const cantidad = Number(row.cantidad || 0);
+      const ingresos = Number(row.ingresos || 0);
+      const categoria = row.categoria || 'sin_categoria';
 
-        const categoria = pedido.categoria || 'sin_categoría';
-        if (!ingresoBrutoPorCategoria[categoria]) {
-          ingresoBrutoPorCategoria[categoria] = 0;
-        }
-        ingresoBrutoPorCategoria[categoria] += totalPedido;
+      total += cantidad;
+
+      if (estado in estados) {
+        estados[estado as keyof typeof estados] += cantidad;
+      }
+
+      if (['entregado', 'en_preparacion', 'listo'].includes(estado)) {
+        ingresosBrutos += ingresos;
+        ingresoBrutoPorCategoria[categoria] = Number(
+          ((ingresoBrutoPorCategoria[categoria] || 0) + ingresos).toFixed(2),
+        );
       }
     }
 
-    // Ticket promedio
-    const ticketPromedio = entregados > 0 ? ingresosBrutos / entregados : 0;
-
-    // Tasa de entrega
-    const tasaEntrega = total > 0 ? (entregados / total * 100).toFixed(2) : '0.00';
+    const ticketPromedio = estados.entregado > 0 ? ingresosBrutos / estados.entregado : 0;
+    const tasaEntrega = total > 0 ? (estados.entregado / total) * 100 : 0;
 
     return {
       idHotel,
       periodo: periodo || 'todos',
       totalPedidos: total,
-      pedidosEntregados: entregados,
-      pedidosPendientes: pendientes,
-      pedidosEnPreparacion: en_preparacion,
-      pedidosCancelados: cancelados,
+      pedidosEntregados: estados.entregado,
+      pedidosPendientes: estados.pendiente,
+      pedidosEnPreparacion: estados.en_preparacion,
+      pedidosCancelados: estados.cancelado,
       ingresosBrutos: parseFloat(ingresosBrutos.toFixed(2)),
-      ingresoBrutoPorCategoria: Object.fromEntries(
-        Object.entries(ingresoBrutoPorCategoria).map(([k, v]) => [k, parseFloat(v.toFixed(2))])
-      ),
+      ingresoBrutoPorCategoria,
       ticketPromedio: parseFloat(ticketPromedio.toFixed(2)),
-      tasaEntrega: parseFloat(tasaEntrega),
+      tasaEntrega: parseFloat(tasaEntrega.toFixed(2)),
     };
   }
-
-  // ──────────────────────────────────────────────────────────────
-  // ── MÉTODOS SAAS - SEGREGACIÓN DE VISTAS PARA ÁREAS ──
-  // ──────────────────────────────────────────────────────────────
-
   /**
    * Mapea Pedidos al DTO operacional (SIN datos financieros)
    * ✅ Seguro para: tableros operacionales, listas de pedidos

@@ -116,7 +116,7 @@ VALUES
   (71, 1, 'Solicitud mantenimiento', 'Reporte de daño o solicitud de reparación', 'mantenimiento', 10, 0, 0.00, 'servicio', NULL, 1, 0, 1, NOW(), NOW());
 
 -- ─── 7. Empleados demo para cada área nueva ──────────────────────────────────
--- Contraseña: sena2026 (mismo hash que cafeteria)
+-- Password seed: rotar antes de usar fuera de local
 INSERT IGNORE INTO `empleados`
   (`id`, `id_hotel`, `cedula`, `nombre`, `apellido`, `email`, `password`, `rol`, `tax_profile`, `estado`, `createdAt`, `updatedAt`)
 VALUES

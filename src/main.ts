@@ -1,41 +1,60 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
 
-  // Configurar ValidationPipe globalmente
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, // Elimina propiedades no definidas en el DTO
-      forbidNonWhitelisted: true, // Lanza error si hay propiedades no permitidas
-      transform: true, // Transforma los datos al tipo definido en el DTO
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      forbidUnknownValues: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
     }),
   );
 
-  // Habilitar CORS para desarrollo con frontend
+  const corsOrigins = (
+    configService.get<string>('CORS_ORIGINS') ||
+    configService.get<string>('CORS_ORIGIN') ||
+    'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3003,http://127.0.0.1:3003'
+  )
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3003'],
+    origin: corsOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Hotel Sena API')
-    .setDescription('Documentación de la API del proyecto Hotel Sena 2026')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
+  const swaggerEnabled = configService.get<string>('ENABLE_SWAGGER') !== 'false';
+  if (swaggerEnabled) {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('ADUS Hospitality API')
+      .setDescription('API REST para gestión integral de hoteles - ADUS')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
 
-  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, swaggerDocument);
+    const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, swaggerDocument);
+  }
 
-  const port = 3001;
+  const port = Number(configService.get<string>('PORT') || 3001);
   await app.listen(port);
-  console.log(`🚀 Servidor corriendo en http://localhost:${port}`);
-  console.log(`📘 Swagger disponible en http://localhost:${port}/api/docs`);
+  console.log(`Servidor corriendo en http://localhost:${port}`);
+  if (swaggerEnabled) {
+    console.log(`Swagger disponible en http://localhost:${port}/api/docs`);
+  }
 }
+
 bootstrap();

@@ -9,12 +9,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Folio, Cargo } from './entities/folio.entity';
-import { CreateFolioDto, AgregarCargoDto, CobrarFolioDto } from './dto/folio.dto';
+import { CreateFolioDto, AgregarCargoDto, CobrarFolioDto, CobrarFolioMixtoDto } from './dto/folio.dto';
 import { v4 as uuidv4 } from 'uuid';
 import { Reserva } from '../reserva/entities/reserva.entity';
 import { Pedido } from '../servicio/entities/pedido.entity';
 import { FacturaService } from '../factura/factura.service';
 import { Factura } from '../factura/entities/factura.entity';
+import { CajaService } from '../caja/caja.service';
+import { MedioPagoService } from '../medio-pago/medio-pago.service';
 
 const MS_POR_DIA = 1000 * 60 * 60 * 24;
 
@@ -29,6 +31,8 @@ export class FolioService {
     private pedidoRepository: Repository<Pedido>,
     @Inject(forwardRef(() => FacturaService))
     private facturaService: FacturaService,
+    private cajaService: CajaService,
+    private medioPagoService: MedioPagoService,
   ) {}
 
   private normalizarMoneda(valor: unknown): number {
@@ -285,6 +289,8 @@ export class FolioService {
       idReserva: folio.idReserva || reservaRelacionada?.id || undefined,
       idCliente: reservaRelacionada?.idCliente,
       nombreCliente: reservaRelacionada?.nombreCliente || undefined,
+      cedulaCliente: reservaRelacionada?.cedulaCliente || undefined,
+      emailCliente: reservaRelacionada?.emailCliente || undefined,
       estadoPago: folio.estadoPago,
       estado: folio.estadoPago,
       cargos: (Array.isArray(folio.cargos) ? folio.cargos : []).map((cargo) => ({
@@ -306,6 +312,25 @@ export class FolioService {
       createdAt: folio.fechaApertura,
       updatedAt: folio.updatedAt,
     };
+  }
+
+  private async serializarFolioConFactura(folio: Folio, reserva?: Reserva | null) {
+    const payload = this.serializarFolio(folio, reserva);
+
+    if (!payload.idReserva) {
+      return payload;
+    }
+
+    try {
+      const factura = await this.facturaService.findByReserva(payload.idReserva);
+      return {
+        ...payload,
+        idFactura: factura.id,
+        numeroFactura: factura.numeroFactura,
+      };
+    } catch {
+      return payload;
+    }
   }
 
   /**
@@ -355,8 +380,10 @@ export class FolioService {
       folios.map((folio) => this.sincronizarCargosSistema(folio)),
     );
 
-    return foliosSincronizados.map(({ folio, reserva }) =>
-      this.serializarFolio(folio, reserva),
+    return Promise.all(
+      foliosSincronizados.map(({ folio, reserva }) =>
+        this.serializarFolioConFactura(folio, reserva),
+      ),
     );
   }
 
@@ -413,6 +440,80 @@ export class FolioService {
     }
 
     return folio;
+  }
+
+  /**
+   * Obtener el folio relacionado con la cedula del cliente.
+   * Prioriza estadias activas y folios pendientes de pago.
+   */
+  async obtenerResumenFolioPorCedula(cedulaCliente: string, idHotel?: number) {
+    const cedula = String(cedulaCliente || '').trim();
+
+    if (!cedula) {
+      throw new BadRequestException('La cedula del cliente es requerida');
+    }
+
+    const reservasQuery = this.reservaRepository
+      .createQueryBuilder('reserva')
+      .leftJoinAndSelect('reserva.habitacion', 'habitacion')
+      .leftJoinAndSelect('reserva.tipoHabitacion', 'tipoHabitacion')
+      .where('reserva.cedula_cliente = :cedula', { cedula })
+      .andWhere("LOWER(reserva.estado_reserva) NOT IN ('cancelada', 'rechazada')")
+      .orderBy(
+        `CASE
+          WHEN reserva.checkin_real IS NOT NULL AND reserva.checkout_real IS NULL THEN 0
+          WHEN LOWER(reserva.estado_reserva) IN ('confirmada', 'reservada') THEN 1
+          ELSE 2
+        END`,
+        'ASC',
+      )
+      .addOrderBy('reserva.updated_at', 'DESC');
+
+    if (idHotel) {
+      reservasQuery.andWhere('reserva.id_hotel = :idHotel', { idHotel });
+    }
+
+    const reservas = await reservasQuery.getMany();
+
+    if (reservas.length === 0) {
+      throw new NotFoundException(`No hay reservas para la cedula ${cedula}`);
+    }
+
+    for (const reserva of reservas) {
+      if (!reserva.idHabitacion) {
+        continue;
+      }
+
+      const folio = await this.folioRepository
+        .createQueryBuilder('folio')
+        .leftJoinAndSelect('folio.habitacion', 'habitacion')
+        .leftJoinAndSelect('folio.reserva', 'folioReserva')
+        .where('(folio.idReserva = :idReserva OR folio.idHabitacion = :idHabitacion)', {
+          idReserva: reserva.id,
+          idHabitacion: reserva.idHabitacion,
+        })
+        .orderBy(
+          `CASE
+            WHEN folio.estadoPago IN ('ACTIVO', 'CERRADO') THEN 0
+            ELSE 1
+          END`,
+          'ASC',
+        )
+        .addOrderBy('folio.fechaApertura', 'DESC')
+        .getOne();
+
+      if (folio) {
+        const { folio: folioSincronizado, reserva: reservaSincronizada } =
+          await this.sincronizarCargosSistema(folio);
+
+        return this.serializarFolioConFactura(
+          folioSincronizado,
+          reservaSincronizada || reserva,
+        );
+      }
+    }
+
+    throw new NotFoundException(`No existe folio para la cedula ${cedula}`);
   }
 
   /**
@@ -516,7 +617,8 @@ export class FolioService {
   async cobrarFolio(
     idHabitacion: number,
     pagoDto: CobrarFolioDto,
-  ): Promise<{ folio: any; pago: any; factura?: any }> {
+    idUsuario?: number,
+  ): Promise<{ folio: any; pago: any; factura?: any; cajaMovimiento?: any }> {
     let folio = await this.obtenerFolio(idHabitacion);
     const { folio: folioSincronizado, reserva } = await this.sincronizarCargosSistema(folio);
     folio = folioSincronizado;
@@ -535,6 +637,22 @@ export class FolioService {
       );
     }
 
+    const idHotel = Number(folio.habitacion?.idHotel || reserva?.habitacion?.idHotel || 0);
+    const cajaMovimiento = await this.cajaService.registrarMovimientoSistema(
+      idHotel,
+      Number(idUsuario || folio.registradoPor || 0),
+      {
+        tipo: 'INGRESO',
+        origen: 'FOLIO',
+        monto: folio.total,
+        idMedioPago: pagoDto.idMedioPago,
+        metodoPago: String(pagoDto.idMedioPago),
+        concepto: `Cobro folio habitacion ${folio.idHabitacion}`,
+        referencia: pagoDto.referenciaPago,
+        idFolio: folio.id,
+        observaciones: pagoDto.observacionesCobro,
+      },
+    );
     // Marcar folio como PAGADO
     folio.estadoPago = 'PAGADO';
     folio.fechaCierre = new Date();
@@ -582,9 +700,157 @@ export class FolioService {
       folio: this.serializarFolio(folioActualizado, reserva),
       pago,
       factura: factura || undefined,
+      cajaMovimiento,
     }
   }
 
+  /**
+   * Cobrar folio con varias lineas/metodos de pago.
+   */
+  async cobrarFolioMixto(
+    idHabitacion: number,
+    pagoDto: CobrarFolioMixtoDto,
+    idUsuario?: number,
+  ): Promise<{ folio: any; pago: any; factura?: any; cajaMovimientos?: any[] }> {
+    let folio = await this.obtenerFolio(idHabitacion);
+    const { folio: folioSincronizado, reserva } = await this.sincronizarCargosSistema(folio);
+    folio = folioSincronizado;
+
+    if (folio.estadoPago === 'PAGADO') {
+      throw new ForbiddenException(
+        `El folio ya fue pagado en fecha ${folio.fechaCierre?.toLocaleDateString('es-CO')}`,
+      );
+    }
+
+    if (pagoDto.idHabitacion && Number(pagoDto.idHabitacion) !== Number(idHabitacion)) {
+      throw new BadRequestException('El ID de habitacion de la ruta no coincide con el cuerpo de la solicitud');
+    }
+
+    const totalFolio = this.normalizarMoneda(folio.total);
+    const totalAplicado = this.normalizarMoneda(
+      pagoDto.pagos.reduce((sum, linea) => sum + Number(linea.montoCobrar || 0), 0),
+    );
+
+    if (totalAplicado !== totalFolio) {
+      throw new BadRequestException(
+        `La suma de pagos (${totalAplicado.toLocaleString('es-CO')}) debe ser igual al total del folio (${totalFolio.toLocaleString('es-CO')})`,
+      );
+    }
+
+    const lineas: Array<{
+      idMedioPago: number;
+      medioPagoNombre: string;
+      montoCobrar: number;
+      montoRecibido?: number;
+      cambioDevuelto: number;
+      referenciaPago?: string;
+      observaciones?: string;
+    }> = [];
+
+    for (const linea of pagoDto.pagos) {
+      const medioPago = await this.medioPagoService.findOne(linea.idMedioPago);
+      const montoCobrar = this.normalizarMoneda(linea.montoCobrar);
+      let cambioDevuelto = 0;
+
+      if (medioPago.requiereReferencia && !linea.referenciaPago) {
+        throw new BadRequestException(`El medio de pago "${medioPago.nombre}" requiere referencia`);
+      }
+
+      if (medioPago.nombre === 'efectivo') {
+        const recibido = this.normalizarMoneda(linea.montoRecibido ?? montoCobrar);
+        if (recibido < montoCobrar) {
+          throw new BadRequestException(
+            `Efectivo insuficiente para la linea de $${montoCobrar.toLocaleString('es-CO')}`,
+          );
+        }
+        cambioDevuelto = this.normalizarMoneda(recibido - montoCobrar);
+      }
+
+      lineas.push({
+        idMedioPago: linea.idMedioPago,
+        medioPagoNombre: medioPago.nombre,
+        montoCobrar,
+        montoRecibido: linea.montoRecibido,
+        cambioDevuelto,
+        referenciaPago: linea.referenciaPago,
+        observaciones: linea.observaciones,
+      });
+    }
+
+    const idHotel = Number(folio.habitacion?.idHotel || reserva?.habitacion?.idHotel || 0);
+    const cajaMovimientos = [] as any[];
+
+    for (const linea of lineas) {
+      const movimiento = await this.cajaService.registrarMovimientoSistema(
+        idHotel,
+        Number(idUsuario || folio.registradoPor || 0),
+        {
+          tipo: 'INGRESO',
+          origen: 'FOLIO',
+          monto: linea.montoCobrar,
+          idMedioPago: linea.idMedioPago,
+          metodoPago: linea.medioPagoNombre,
+          concepto: `Cobro mixto folio habitacion ${folio.idHabitacion}`,
+          referencia: linea.referenciaPago,
+          idFolio: folio.id,
+          observaciones: linea.observaciones || pagoDto.observacionesCobro,
+        },
+      );
+      cajaMovimientos.push(movimiento);
+    }
+
+    folio.estadoPago = 'PAGADO';
+    folio.fechaCierre = new Date();
+    folio.idMedioPago = undefined;
+    folio.referenciaPago = 'PAGO_MIXTO';
+    if (!folio.historicosPagos) {
+      folio.historicosPagos = [];
+    }
+    folio.historicosPagos.push(
+      ...lineas.map((linea) => ({
+        idMedioPago: linea.idMedioPago,
+        monto: linea.montoCobrar,
+        referencia: linea.referenciaPago,
+        fecha: new Date(),
+        cobrador: pagoDto.cobrador,
+      })),
+    );
+
+    const folioActualizado = await this.folioRepository.save(folio);
+
+    const pago = {
+      idFolio: folio.id,
+      monto: totalAplicado,
+      vuelto: this.normalizarMoneda(lineas.reduce((sum, linea) => sum + linea.cambioDevuelto, 0)),
+      concepto: pagoDto.observacionesCobro || 'Pago mixto de folio',
+      lineas: lineas.map((linea) => ({
+        idMedioPago: linea.idMedioPago,
+        medioPago: linea.medioPagoNombre,
+        monto: linea.montoCobrar,
+        montoRecibido: linea.montoRecibido,
+        cambioDevuelto: linea.cambioDevuelto,
+        referencia: linea.referenciaPago,
+      })),
+      cobrador: pagoDto.cobrador,
+      fecha: new Date(),
+    };
+
+    let factura: Factura | null = null;
+    try {
+      if (reserva?.id) {
+        factura = await this.facturaService.generarDesdeReserva(reserva);
+      }
+    } catch (error) {
+      console.warn('Advertencia: No se pudo generar factura:', (error as Error).message);
+    }
+
+    return {
+      folio: this.serializarFolio(folioActualizado, reserva),
+      pago,
+      factura: factura || undefined,
+      cajaMovimientos,
+    };
+  }
   /**
    * Obtener resumen de folio (para mostrar en vista)
    */
@@ -594,6 +860,6 @@ export class FolioService {
       folio,
     );
 
-    return this.serializarFolio(folioSincronizado, reserva);
+    return this.serializarFolioConFactura(folioSincronizado, reserva);
   }
 }

@@ -33,7 +33,7 @@ export class MedioPagoController {
    */
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'admin', 'superadmin', 'cliente')
+  @Roles('recepcionista', 'cajero', 'admin', 'superadmin', 'cliente')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener medios de pago activos' })
   @ApiResponse({ status: 200, description: 'Medios de pago obtenidos exitosamente' })

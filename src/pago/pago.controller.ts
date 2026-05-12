@@ -22,6 +22,7 @@ import {
 import { PagoService } from './pago.service';
 import { CreatePagoDto } from './dto/create-pago.dto';
 import { DevolverPagoDto } from './dto/devolver-pago.dto';
+import { CreatePagoMixtoDto } from './dto/create-pago-mixto.dto';
 import { Pago } from './entities/pago.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -36,13 +37,13 @@ export class PagoController {
    * POST /pagos
    * Registrar un nuevo pago para una factura
    * 
-   * Nota importante: Solo recepcionista y superadmin pueden registrar pagos
+   * Nota importante: Solo recepcionista, cajero y superadmin pueden registrar pagos
    * Los admins del hotel SOLO pueden ver reportes de pagos, no operarlos.
    * Esta segregación de funciones previene fraude (segregation of duties).
    */
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'superadmin')
+  @Roles('recepcionista', 'cajero', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Registrar nuevo pago' })
   @ApiResponse({ status: 201, description: 'Pago registrado exitosamente' })
@@ -52,24 +53,52 @@ export class PagoController {
     @Body() dto: CreatePagoDto,
     @Request() req: any,
   ): Promise<Pago> {
-    return this.pagoService.registrarPago(dto, req.user?.id);
+    return this.pagoService.registrarPago(dto, req.user?.id, {
+      rol: req.user?.rol,
+      idHotel: req.user?.idHotel,
+    });
   }
 
+  /**
+   * POST /pagos/mixto
+   * Registrar varias lineas de pago para una factura en una sola transaccion.
+   */
+  @Post('mixto')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('recepcionista', 'cajero', 'superadmin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Registrar pago mixto para una factura' })
+  @ApiResponse({ status: 201, description: 'Pago mixto registrado exitosamente' })
+  @ApiResponse({ status: 400, description: 'Datos invalidos o caja cerrada' })
+  async registrarPagoMixto(
+    @Body() dto: CreatePagoMixtoDto,
+    @Request() req: any,
+  ): Promise<Pago[]> {
+    return this.pagoService.registrarPagoMixto(dto, req.user?.id, {
+      rol: req.user?.rol,
+      idHotel: req.user?.idHotel,
+    });
+  }
   /**
    * GET /pagos/factura/:idFactura
    * Obtener todos los pagos de una factura
    */
   @Get('factura/:idFactura')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'admin', 'superadmin', 'cliente')
+  @Roles('recepcionista', 'cajero', 'admin', 'superadmin', 'cliente')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener pagos de una factura' })
   @ApiParam({ name: 'idFactura', type: Number })
   @ApiResponse({ status: 200, description: 'Pagos obtenidos exitosamente' })
   async findByFactura(
     @Param('idFactura', ParseIntPipe) idFactura: number,
+    @Request() req: any,
   ): Promise<Pago[]> {
-    return this.pagoService.findByFactura(idFactura);
+    return this.pagoService.findByFactura(idFactura, {
+      rol: req.user?.rol,
+      idHotel: req.user?.idHotel,
+      idCliente: req.user?.idCliente,
+    });
   }
 
   /**
@@ -113,7 +142,11 @@ export class PagoController {
   async devolverPago(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: DevolverPagoDto,
+    @Request() req: any,
   ): Promise<Pago> {
-    return this.pagoService.devolverPago(id, dto.motivo);
+    return this.pagoService.devolverPago(id, dto, req.user?.id, {
+      rol: req.user?.rol,
+      idHotel: req.user?.idHotel,
+    });
   }
 }

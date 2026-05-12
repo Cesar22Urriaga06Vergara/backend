@@ -13,7 +13,9 @@ import {
   Request,
   ForbiddenException,
   NotFoundException,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -147,6 +149,105 @@ export class FacturaController {
     return this.facturaService.findAll(filters);
   }
 
+  /**
+   * GET /facturas/:id/ticket-pos
+   * Payload optimizado para vista previa e impresion termica POS.
+   */
+  @Get(':id/ticket-pos')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('recepcionista', 'cajero', 'admin', 'superadmin', 'cliente')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generar payload de factura tipo POS/termica' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiQuery({ name: 'formato', enum: ['58mm', '80mm'], required: false })
+  @ApiResponse({ status: 200, description: 'Ticket POS generado exitosamente' })
+  @ApiResponse({ status: 403, description: 'No tiene autorizacion para acceder a esta factura' })
+  async ticketPos(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('formato') formato: '58mm' | '80mm' = '80mm',
+    @Request() req: any,
+  ): Promise<any> {
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+    const factura = await this.facturaService.findOne(id);
+
+    if (userRole === 'cliente' && factura.idCliente !== req.user.idCliente) {
+      throw new ForbiddenException('No tiene autorizacion para acceder a esta factura');
+    }
+
+    if (['admin', 'recepcionista', 'cajero'].includes(userRole) && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    if (['admin', 'recepcionista', 'cajero'].includes(userRole) && factura.idHotel !== userIdHotel) {
+      throw new ForbiddenException('No tiene autorizacion para acceder a esta factura');
+    }
+
+    const formatoSeguro = formato === '58mm' ? '58mm' : '80mm';
+    return this.facturaService.generarTicketPos(id, formatoSeguro);
+  }
+
+  @Get(':id/ticket-pos/pdf')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('recepcionista', 'cajero', 'admin', 'superadmin', 'cliente')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Descargar ticket POS en PDF y registrar reimpresion' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiQuery({ name: 'formato', enum: ['58mm', '80mm'], required: false })
+  @ApiQuery({ name: 'motivo', type: String, required: false })
+  async ticketPosPdf(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('formato') formato: '58mm' | '80mm' = '80mm',
+    @Query('motivo') motivo: string | undefined,
+    @Request() req: any,
+    @Res() res: Response,
+  ) {
+    const userRole = req.user.rol;
+    const userIdHotel = req.user.idHotel;
+    const factura = await this.facturaService.findOne(id);
+
+    if (userRole === 'cliente' && factura.idCliente !== req.user.idCliente) {
+      throw new ForbiddenException('No tiene autorizacion para acceder a esta factura');
+    }
+
+    if (['admin', 'recepcionista', 'cajero'].includes(userRole) && !userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    if (['admin', 'recepcionista', 'cajero'].includes(userRole) && factura.idHotel !== userIdHotel) {
+      throw new ForbiddenException('No tiene autorizacion para acceder a esta factura');
+    }
+
+    const formatoSeguro = formato === '58mm' ? '58mm' : '80mm';
+    const pdf = await this.facturaService.generarTicketPosPdf(id, formatoSeguro, {
+      idUsuario: req.user?.id || null,
+      usuarioRol: userRole || null,
+      motivo: motivo || 'Descarga/reimpresion ticket POS PDF',
+      ipOrigen: req.ip || req.socket?.remoteAddress || null,
+      userAgent: req.headers?.['user-agent'] || null,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="ticket-${factura.numeroFactura}.pdf"`);
+    res.setHeader('Content-Length', pdf.length);
+    return res.end(pdf);
+  }
+
+  @Get(':id/reimpresiones')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin', 'superadmin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Listar auditoria de reimpresiones de una factura' })
+  async listarReimpresiones(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: any,
+  ) {
+    const factura = await this.facturaService.findOne(id);
+    if (req.user.rol === 'admin' && factura.idHotel !== req.user.idHotel) {
+      throw new ForbiddenException('No tiene autorizacion para acceder a esta factura');
+    }
+    return this.facturaService.listarReimpresiones(id);
+  }
   /**
    * GET /facturas/:id
    * Obtener una factura por ID

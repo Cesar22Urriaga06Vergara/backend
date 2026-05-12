@@ -9,6 +9,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { Reserva } from '../../reserva/entities/reserva.entity';
+import { ResolucionFacturacion } from '../resoluciones/entities/resolucion-facturacion.entity';
 
 @Entity('facturas')
 export class Factura {
@@ -45,6 +46,22 @@ export class Factura {
 
   @Column({ name: 'id_hotel' })
   idHotel: number;
+
+  @Column({ name: 'id_resolucion_facturacion', type: 'int', nullable: true })
+  idResolucionFacturacion?: number | null;
+
+  @ManyToOne(() => ResolucionFacturacion, (resolucion) => resolucion.facturas, { nullable: true })
+  @JoinColumn({ name: 'id_resolucion_facturacion' })
+  resolucionFacturacion?: ResolucionFacturacion | null;
+
+  @Column({ name: 'prefijo_factura', type: 'varchar', length: 20, nullable: true })
+  prefijoFactura?: string | null;
+
+  @Column({ name: 'consecutivo_factura', type: 'int', nullable: true })
+  consecutivoFactura?: number | null;
+
+  @Column({ name: 'resolucion_numero', type: 'varchar', length: 80, nullable: true })
+  resolucionNumero?: string | null;
 
   // Montos
   @Column({ name: 'subtotal', type: 'decimal', precision: 12, scale: 2 })

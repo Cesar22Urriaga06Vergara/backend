@@ -12,7 +12,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateHotelDto {
   @ApiProperty({
-    example: 'Hotel Sena 2026',
+    example: 'ADUS Hotel Bogotá',
     description: 'Nombre del hotel',
   })
   @IsString()
@@ -87,4 +87,41 @@ export class CreateHotelDto {
   @IsOptional()
   @IsString()
   descripcion?: string;
+  @ApiPropertyOptional({
+    example: 'Hotel Mirador del Lago S.A.S.',
+    description: 'Razon social usada en documentos fiscales si difiere del nombre comercial',
+  })
+  @IsOptional()
+  @IsString()
+  razonSocial?: string;
+
+  @ApiPropertyOptional({ example: 'https://cdn.hotel.com/logo.png' })
+  @IsOptional()
+  @IsString()
+  logoUrl?: string;
+
+  @ApiPropertyOptional({ example: 'Resolucion DIAN 18764000000000 de 2026' })
+  @IsOptional()
+  @IsString()
+  resolucionFacturacion?: string;
+
+  @ApiPropertyOptional({ example: 'FV' })
+  @IsOptional()
+  @IsString()
+  prefijoFacturacion?: string;
+
+  @ApiPropertyOptional({ example: 'Gracias por su visita' })
+  @IsOptional()
+  @IsString()
+  pieFactura?: string;
+
+  @ApiPropertyOptional({ example: 'COP' })
+  @IsOptional()
+  @IsString()
+  moneda?: string;
+
+  @ApiPropertyOptional({ example: '80mm', enum: ['58mm', '80mm'] })
+  @IsOptional()
+  @IsString()
+  posFormatoDefault?: '58mm' | '80mm';
 }

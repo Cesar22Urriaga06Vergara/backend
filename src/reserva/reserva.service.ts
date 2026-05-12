@@ -17,6 +17,8 @@ import { CreateReservaDto } from './dto/create-reserva.dto';
 import { UpdateReservaDto } from './dto/update-reserva.dto';
 import { DisponibilidadQueryDto } from './dto/disponibilidad-query.dto';
 import { DisponibilidadResponseDto, HabitacionDisponibleDto } from './dto/disponibilidad.dto';
+import { ConfirmarCheckInDto } from './dto/confirmar-checkin.dto';
+import { ConfirmarCheckoutDto } from './dto/confirmar-checkout.dto';
 import { FacturaService } from '../factura/factura.service';
 import { Factura } from '../factura/entities/factura.entity';
 import { FolioService } from '../folio/folio.service';
@@ -28,6 +30,37 @@ import {
 
 @Injectable()
 export class ReservaService {
+  private aplicarHoraOperativa(fechaBase: Date, hora?: string): Date {
+    if (!hora || !/^\d{2}:\d{2}$/.test(hora)) {
+      return fechaBase;
+    }
+
+    const [horas, minutos] = hora.split(':').map(Number);
+    if (Number.isNaN(horas) || Number.isNaN(minutos) || horas > 23 || minutos > 59) {
+      return fechaBase;
+    }
+
+    const fecha = new Date(fechaBase);
+    fecha.setHours(horas, minutos, 0, 0);
+    return fecha;
+  }
+
+  private anexarObservacionOperativa(
+    observacionesActuales: string | null | undefined,
+    etiqueta: string,
+    observacion?: string,
+    hora?: string,
+  ): string | null | undefined {
+    const texto = observacion?.trim();
+    if (!texto) {
+      return observacionesActuales;
+    }
+
+    const fecha = new Date().toLocaleString('es-CO');
+    const sufijoHora = hora ? ` (${hora})` : '';
+    const linea = `[${fecha}] ${etiqueta}${sufijoHora}: ${texto}`;
+    return [observacionesActuales, linea].filter(Boolean).join('\n');
+  }
   constructor(
     @InjectRepository(Reserva)
     private reservaRepository: Repository<Reserva>,
@@ -253,10 +286,10 @@ export class ReservaService {
         .leftJoinAndSelect(
           Reserva,
           'r',
-          `r.id_habitacion = h.id AND 
-           r.id_hotel = :idHotel AND 
-           r.estado_reserva = 'confirmada' AND 
-           r.checkin_previsto < :checkoutFecha AND 
+          `r.id_habitacion = h.id AND
+           r.id_hotel = :idHotel AND
+           r.estado_reserva IN ('reservada', 'confirmada') AND
+           r.checkin_previsto < :checkoutFecha AND
            r.checkout_previsto > :checkinFecha`,
           {
             idHotel: createReservaDto.idHotel,
@@ -488,6 +521,29 @@ export class ReservaService {
       reserva.observaciones = updateReservaDto.observaciones;
     }
 
+    const nuevoCheckin = updateReservaDto.checkinPrevisto
+      ? new Date(updateReservaDto.checkinPrevisto)
+      : reserva.checkinPrevisto;
+    const nuevoCheckout = updateReservaDto.checkoutPrevisto
+      ? new Date(updateReservaDto.checkoutPrevisto)
+      : reserva.checkoutPrevisto;
+
+    if (updateReservaDto.checkinPrevisto || updateReservaDto.checkoutPrevisto) {
+      const reservasConflictivas = await this.reservaRepository
+        .createQueryBuilder('reserva')
+        .where('reserva.id <> :id', { id })
+        .andWhere('reserva.id_hotel = :idHotel', { idHotel: reserva.idHotel })
+        .andWhere('reserva.id_habitacion = :idHabitacion', { idHabitacion: reserva.idHabitacion })
+        .andWhere('reserva.estado_reserva IN (:...estados)', { estados: ['reservada', 'confirmada'] })
+        .andWhere('reserva.checkin_previsto < :checkout', { checkout: nuevoCheckout })
+        .andWhere('reserva.checkout_previsto > :checkin', { checkin: nuevoCheckin })
+        .getCount();
+
+      if (reservasConflictivas > 0) {
+        throw new ConflictException('La habitacion ya tiene una reserva solapada para las fechas solicitadas');
+      }
+    }
+
     return await this.reservaRepository.save(reserva);
   }
 
@@ -557,7 +613,7 @@ export class ReservaService {
    * - Recepcionista confirma (confirmarReserva) → CONFIRMADA
    * - Cliente llega, recepcionista registra entrada (confirmarCheckin) → checkinReal = now
    */
-  async confirmarCheckin(id: number): Promise<Reserva> {
+  async confirmarCheckin(id: number, dto?: ConfirmarCheckInDto): Promise<Reserva> {
     const reserva = await this.findOne(id);
 
     // Validar que está en estado RESERVADA o CONFIRMADA (puede hacer check-in)
@@ -571,14 +627,30 @@ export class ReservaService {
     }
 
     // Registrar hora de entrada
-    reserva.checkinReal = new Date();
-    
+    reserva.checkinReal = this.aplicarHoraOperativa(new Date(), dto?.horaCheckin);
+    reserva.observaciones = this.anexarObservacionOperativa(
+      reserva.observaciones,
+      'Check-in',
+      dto?.observacionesCheckin,
+      dto?.horaCheckin,
+    ) || reserva.observaciones;
+
+    if (dto?.numeroHuespedesActual) {
+      reserva.numeroHuespedes = dto.numeroHuespedesActual;
+    }
     // Asegurar que está en CONFIRMADA (puede haber saltado confirmarReserva)
     if (reserva.estadoReserva?.toLowerCase() !== ReservaEstado.CONFIRMADA) {
       reserva.estadoReserva = ReservaEstado.CONFIRMADA;
     }
 
     const reservaGuardada = await this.reservaRepository.save(reserva);
+
+    if (reservaGuardada.idHabitacion) {
+      await this.habitacionRepository.update(reservaGuardada.idHabitacion, {
+        estado: 'ocupada',
+        fechaActualizacion: new Date(),
+      });
+    }
 
     // Abrir folio automáticamente para que Caja y Checkout queden conectados.
     if (reservaGuardada.idHabitacion) {
@@ -608,7 +680,7 @@ export class ReservaService {
    * NOTA: Transacción completa se implementará en Fase 2
    * Actualmente: cambio de estado + llamada a generación de factura
    */
-  async confirmarCheckout(id: number): Promise<{ reserva: Reserva; factura?: any }> {
+  async confirmarCheckout(id: number, dto?: ConfirmarCheckoutDto): Promise<{ reserva: Reserva; factura?: any }> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -662,10 +734,23 @@ export class ReservaService {
       }
 
       // Actualizar reserva - Acción LIMPIA sin generar factura
-      reserva.checkoutReal = new Date();
+      reserva.checkoutReal = this.aplicarHoraOperativa(new Date(), dto?.horaCheckout);
+      reserva.observaciones = this.anexarObservacionOperativa(
+        reserva.observaciones,
+        'Check-out',
+        dto?.observacionesCheckout,
+        dto?.horaCheckout,
+      ) || reserva.observaciones;
       reserva.estadoReserva = ReservaEstado.COMPLETADA;
 
       const reservaGuardada = await queryRunner.manager.save(Reserva, reserva);
+
+      const estadoHabitacion = dto?.estadoLimpieza === 'LIMPIO' ? 'disponible' : 'limpieza';
+
+      await queryRunner.manager.update(Habitacion, reserva.idHabitacion, {
+        estado: estadoHabitacion,
+        fechaActualizacion: new Date(),
+      });
 
       // Commit de la transacción
       await queryRunner.commitTransaction();

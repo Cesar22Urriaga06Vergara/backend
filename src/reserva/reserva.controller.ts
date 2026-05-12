@@ -27,6 +27,7 @@ import { ReservaService } from './reserva.service';
 import { CreateReservaDto } from './dto/create-reserva.dto';
 import { UpdateReservaDto } from './dto/update-reserva.dto';
 import { ConfirmarCheckInDto } from './dto/confirmar-checkin.dto';
+import { ConfirmarCheckoutDto } from './dto/confirmar-checkout.dto';
 import { DisponibilidadQueryDto } from './dto/disponibilidad-query.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -548,7 +549,7 @@ export class ReservaController {
       );
     }
 
-    return await this.reservaService.confirmarCheckin(dto.idReserva);
+    return await this.reservaService.confirmarCheckin(dto.idReserva, dto);
   }
 
   /**
@@ -568,6 +569,7 @@ export class ReservaController {
   @ApiResponse({ status: 403, description: 'Acceso denegado' })
   async confirmarCheckout(
     @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ConfirmarCheckoutDto,
     @Request() req,
   ): Promise<{ reserva: Reserva; factura?: any }> {
     const reserva = await this.reservaService.findOne(id);
@@ -588,7 +590,7 @@ export class ReservaController {
       );
     }
 
-    return await this.reservaService.confirmarCheckout(id);
+    return await this.reservaService.confirmarCheckout(id, dto);
   }
 
   /**

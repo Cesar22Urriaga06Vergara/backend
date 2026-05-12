@@ -7,6 +7,10 @@ import {
   MaxLength,
   MinLength,
   IsIn,
+  IsArray,
+  ArrayMinSize,
+  ValidateNested,
+  Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -117,6 +121,69 @@ export class CobrarFolioDto {
     example: 'Juan Pérez (Recepcionista)',
     maxLength: 100,
   })
+  @IsOptional()
+  @IsString({ message: 'Cobrador debe ser texto' })
+  @MaxLength(100, { message: 'Cobrador no puede exceder 100 caracteres' })
+  cobrador?: string;
+}
+
+export class CobrarFolioMixtoLineaDto {
+  @ApiProperty({ description: 'ID del medio de pago', example: 1, type: Number })
+  @Type(() => Number)
+  @IsNotEmpty({ message: 'ID de medio pago es requerido' })
+  @IsNumber({}, { message: 'ID de medio pago debe ser numero' })
+  @IsPositive({ message: 'ID de medio pago debe ser positivo' })
+  idMedioPago: number;
+
+  @ApiProperty({ description: 'Monto aplicado a esta linea de pago', example: 50000, type: Number })
+  @Type(() => Number)
+  @IsNotEmpty({ message: 'Monto a cobrar es requerido' })
+  @IsNumber({}, { message: 'Monto debe ser numero' })
+  @IsPositive({ message: 'Monto debe ser positivo' })
+  montoCobrar: number;
+
+  @ApiPropertyOptional({ description: 'Monto recibido del cliente para efectivo', example: 60000, type: Number })
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({}, { message: 'Monto recibido debe ser numero' })
+  @Min(0, { message: 'Monto recibido debe ser mayor o igual a 0' })
+  montoRecibido?: number;
+
+  @ApiPropertyOptional({ description: 'Referencia de pago', example: 'TRX-12345', maxLength: 80 })
+  @IsOptional()
+  @IsString({ message: 'Referencia debe ser texto' })
+  @MaxLength(80, { message: 'Referencia no puede exceder 80 caracteres' })
+  referenciaPago?: string;
+
+  @ApiPropertyOptional({ description: 'Observaciones de la linea', maxLength: 180 })
+  @IsOptional()
+  @IsString({ message: 'Observaciones debe ser texto' })
+  @MaxLength(180, { message: 'Observaciones no puede exceder 180 caracteres' })
+  observaciones?: string;
+}
+
+export class CobrarFolioMixtoDto {
+  @ApiProperty({ description: 'ID de la habitacion', example: 101, type: Number })
+  @Type(() => Number)
+  @IsNotEmpty({ message: 'ID de habitacion es requerido' })
+  @IsNumber({}, { message: 'ID debe ser numero' })
+  @IsPositive({ message: 'ID debe ser positivo' })
+  idHabitacion: number;
+
+  @ApiProperty({ description: 'Lineas de pago', type: [CobrarFolioMixtoLineaDto] })
+  @IsArray({ message: 'Pagos debe ser una lista' })
+  @ArrayMinSize(2, { message: 'Un pago mixto requiere al menos dos lineas' })
+  @ValidateNested({ each: true })
+  @Type(() => CobrarFolioMixtoLineaDto)
+  pagos: CobrarFolioMixtoLineaDto[];
+
+  @ApiPropertyOptional({ description: 'Observaciones generales del cobro', maxLength: 300 })
+  @IsOptional()
+  @IsString({ message: 'Observaciones debe ser texto' })
+  @MaxLength(300, { message: 'Observaciones no puede exceder 300 caracteres' })
+  observacionesCobro?: string;
+
+  @ApiPropertyOptional({ description: 'Nombre de quien realiza el cobro', maxLength: 100 })
   @IsOptional()
   @IsString({ message: 'Cobrador debe ser texto' })
   @MaxLength(100, { message: 'Cobrador no puede exceder 100 caracteres' })

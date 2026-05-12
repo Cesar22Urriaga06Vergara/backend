@@ -6,6 +6,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Factura } from './entities/factura.entity';
 import { DetalleFactura } from './entities/detalle-factura.entity';
+import { FacturaReimpresion } from './entities/factura-reimpresion.entity';
 import { Pedido } from '../servicio/entities/pedido.entity';
 import { PedidoItem } from '../servicio/entities/pedido-item.entity';
 import { Servicio } from '../servicio/entities/servicio.entity';
@@ -15,6 +16,7 @@ import { ImpuestoService } from '../impuesto/impuesto.service';
 import { ClienteService } from '../cliente/cliente.service';
 import { HotelService } from '../hotel/hotel.service';
 import { IntegridadService } from './integridad.service';
+import { ResolucionesFacturacionService } from './resoluciones/resoluciones-facturacion.service';
 import { ESTADOS_FACTURA, TRANSICIONES_FACTURA, EstadoFactura } from '../common/constants/estados.constants';
 
 describe('FacturaService - State Machine & Validations', () => {
@@ -74,6 +76,10 @@ describe('FacturaService - State Machine & Validations', () => {
           useValue: mockRepository,
         },
         {
+          provide: getRepositoryToken(FacturaReimpresion),
+          useValue: mockRepository,
+        },
+        {
           provide: getRepositoryToken(Pedido),
           useValue: mockRepository,
         },
@@ -114,6 +120,13 @@ describe('FacturaService - State Machine & Validations', () => {
           useValue: {
             validarFacturaParaEmision: jest.fn(),
             validarTotalesFactura: jest.fn(),
+          },
+        },
+        {
+          provide: ResolucionesFacturacionService,
+          useValue: {
+            obtenerResolucionActiva: jest.fn(),
+            consumirNumero: jest.fn(),
           },
         },
         {

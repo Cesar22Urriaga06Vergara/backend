@@ -50,6 +50,15 @@ export class ConfirmarCheckInDto {
   observacionesCheckin?: string;
 
   @ApiPropertyOptional({
+    description: 'Hora local del check-in en formato HH:mm',
+    example: '15:30',
+    maxLength: 5,
+  })
+  @IsOptional()
+  @IsString({ message: 'Hora de check-in debe ser texto' })
+  @MaxLength(5, { message: 'Hora de check-in no puede exceder 5 caracteres' })
+  horaCheckin?: string;
+  @ApiPropertyOptional({
     description: 'Documento de identificación del huésped principal',
     example: '1234567890',
     minLength: 5,

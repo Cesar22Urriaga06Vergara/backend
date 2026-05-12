@@ -1,8 +1,8 @@
 -- ========================================
 -- Script de creación de usuarios por área
 -- Fecha: 2026-04-05
--- Contraseña para todos: 123456789
--- Hash bcrypt: $2b$10$NXVLWoOYQJ2ydkrSLTPWMOljida0nAXDtXymq8dg2AbSoqci42eI6
+-- Password seed: rotar antes de usar fuera de local
+-- Hash bcrypt seed incluido por compatibilidad con datos demo
 -- ========================================
 
 USE hotel;

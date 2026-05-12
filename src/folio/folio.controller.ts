@@ -21,7 +21,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { FolioService } from './folio.service';
-import { CreateFolioDto, AgregarCargoDto, CobrarFolioDto, EliminarCargoDto } from './dto/folio.dto';
+import { CreateFolioDto, AgregarCargoDto, CobrarFolioDto, CobrarFolioMixtoDto, EliminarCargoDto } from './dto/folio.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -32,13 +32,37 @@ import { Folio } from './entities/folio.entity';
 export class FolioController {
   constructor(private readonly folioService: FolioService) {}
 
+  private obtenerIdHotelFiltro(req: any, idHotel?: string): number | undefined {
+    const rol = req.user?.rol;
+    const userIdHotel = req.user?.idHotel;
+
+    if (rol === 'superadmin') {
+      if (idHotel === undefined) {
+        return undefined;
+      }
+
+      const parsed = Number(idHotel);
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        throw new BadRequestException('idHotel debe ser un numero valido');
+      }
+
+      return parsed;
+    }
+
+    if (!userIdHotel) {
+      throw new BadRequestException('Usuario debe estar asignado a un hotel');
+    }
+
+    return Number(userIdHotel);
+  }
+
   /**
    * POST /folios
    * Crear un nuevo folio para una habitación (abre en checkin)
    */
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'admin', 'superadmin')
+  @Roles('recepcionista', 'cajero', 'admin', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Crear nuevo folio de habitación' })
   @ApiResponse({ status: 201, description: 'Folio creado exitosamente' })
@@ -62,7 +86,7 @@ export class FolioController {
    */
   @Get('historial')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'admin', 'superadmin')
+  @Roles('recepcionista', 'cajero', 'admin', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener historial de folios' })
   @ApiQuery({ name: 'idHotel', type: Number, required: false })
@@ -79,7 +103,6 @@ export class FolioController {
   ): Promise<any[]> {
     const rol = req.user?.rol;
     const userIdHotel = req.user?.idHotel;
-
     let idHotelFiltro: number | undefined;
 
     if (rol === 'superadmin') {
@@ -107,12 +130,34 @@ export class FolioController {
   }
 
   /**
+   * GET /folios/cedula/:cedula
+   * Obtener folio por cedula del cliente
+   */
+  @Get('cedula/:cedula')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('recepcionista', 'cajero', 'admin', 'superadmin')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener folio por cedula del cliente' })
+  @ApiParam({ name: 'cedula', type: String })
+  @ApiQuery({ name: 'idHotel', type: Number, required: false })
+  @ApiResponse({ status: 200, description: 'Folio obtenido exitosamente' })
+  @ApiResponse({ status: 404, description: 'Folio no encontrado para la cedula' })
+  async obtenerFolioPorCedula(
+    @Param('cedula') cedula: string,
+    @Request() req: any,
+    @Query('idHotel') idHotel?: string,
+  ): Promise<any> {
+    const idHotelFiltro = this.obtenerIdHotelFiltro(req, idHotel);
+    return await this.folioService.obtenerResumenFolioPorCedula(cedula, idHotelFiltro);
+  }
+
+  /**
    * GET /folios/:idHabitacion
    * Obtener folio actual de una habitación
    */
   @Get(':idHabitacion')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'admin', 'superadmin')
+  @Roles('recepcionista', 'cajero', 'admin', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Obtener folio de habitación' })
   @ApiParam({ name: 'idHabitacion', type: Number })
@@ -156,7 +201,7 @@ export class FolioController {
    */
   @Delete(':idHabitacion/cargos/:idCargo')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'admin', 'superadmin')
+  @Roles('recepcionista', 'cajero', 'admin', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Eliminar cargo del folio' })
   @ApiParam({ name: 'idHabitacion', type: Number })
@@ -178,7 +223,7 @@ export class FolioController {
    */
   @Put(':idHabitacion/cerrar')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'admin', 'superadmin')
+  @Roles('recepcionista', 'cajero', 'admin', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Cerrar folio (antes de cobrar)' })
   @ApiParam({ name: 'idHabitacion', type: Number })
@@ -198,7 +243,7 @@ export class FolioController {
    */
   @Post(':idHabitacion/cobrar')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('recepcionista', 'superadmin')
+  @Roles('recepcionista', 'cajero', 'superadmin')
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Cobrar folio (registra pago y marca como PAGADO)',
@@ -212,8 +257,9 @@ export class FolioController {
   async cobrarFolio(
     @Param('idHabitacion', ParseIntPipe) idHabitacion: number,
     @Body() dto: CobrarFolioDto,
+    @Request() req: any,
   ): Promise<any> {
-    const respuesta = await this.folioService.cobrarFolio(idHabitacion, dto);
+    const respuesta = await this.folioService.cobrarFolio(idHabitacion, dto, Number(req.user?.idEmpleado || req.user?.id || req.user?.sub || 0));
 
     // Intentar obtener resumen enriquecido, pero si falla, retornar lo que tengo
     try {
