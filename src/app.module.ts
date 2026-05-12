@@ -44,17 +44,41 @@ import { CajaModule } from './caja/caja.module';
     // useFactory permite inyectar ConfigService para leer variables de entorno
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'mysql',
-        host: configService.get('DB_HOST'),
-        port: Number(configService.get('DB_PORT') || 3306),
-        username: configService.get('DB_USERNAME'),
-        password: configService.get('DB_PASSWORD'),
-        database: configService.get('DB_DATABASE'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: configService.get<string>('TYPEORM_SYNCHRONIZE') === 'true',
-        logging: configService.get<string>('TYPEORM_LOGGING') === 'true',
-      }),
+      useFactory: (configService: ConfigService) => {
+        const databaseUrl = [
+          configService.get<string>('MYSQL_URL'),
+          configService.get<string>('DATABASE_URL'),
+        ].find((url) => url && /^mysql:\/\//i.test(url));
+
+        return {
+          type: 'mysql',
+          ...(databaseUrl
+            ? { url: databaseUrl }
+            : {
+                host:
+                  configService.get<string>('MYSQLHOST') ||
+                  configService.get<string>('DB_HOST'),
+                port: Number(
+                  configService.get<string>('MYSQLPORT') ||
+                    configService.get<string>('DB_PORT') ||
+                    3306,
+                ),
+                username:
+                  configService.get<string>('MYSQLUSER') ||
+                  configService.get<string>('DB_USERNAME'),
+                password:
+                  configService.get<string>('MYSQLPASSWORD') ||
+                  configService.get<string>('DB_PASSWORD'),
+                database:
+                  configService.get<string>('MYSQLDATABASE') ||
+                  configService.get<string>('DB_DATABASE'),
+              }),
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          synchronize:
+            configService.get<string>('TYPEORM_SYNCHRONIZE') === 'true',
+          logging: configService.get<string>('TYPEORM_LOGGING') === 'true',
+        };
+      },
       inject: [ConfigService],
     }),
 

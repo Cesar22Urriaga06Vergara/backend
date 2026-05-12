@@ -1,5 +1,6 @@
 import { Controller, Post, Body, Get, UseGuards, Request, Put, ForbiddenException, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { ConfigService } from '@nestjs/config';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { CreateSuperadminDto } from './dto/create-superadmin.dto';
@@ -19,7 +20,10 @@ import {
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
 
   /**
    * POST /auth/register
@@ -223,7 +227,15 @@ export class AuthController {
     const result = await this.authService.googleLogin(req.user);
 
     // Redirigir al frontend con el token como query param
-    const frontendUrl = process.env.CORS_ORIGIN || 'http://localhost:3000';
+    const frontendUrl =
+      this.configService.get<string>('FRONTEND_URL') ||
+      this.configService.get<string>('CORS_ORIGIN') ||
+      this.configService
+        .get<string>('CORS_ORIGINS')
+        ?.split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean)[0] ||
+      'http://localhost:3000';
     const redirectUrl = `${frontendUrl}/auth/callback?token=${result.token}`;
 
     return res.redirect(redirectUrl);
