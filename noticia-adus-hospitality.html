@@ -1,0 +1,1536 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Noticia | ADUS Hospitality OS</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #ffffff;
+      --ink: #13202b;
+      --muted: #5a6b76;
+      --line: #dbe6ea;
+      --navy: #0f1b2d;
+      --sena: #20a342;
+      --teal: #18b8aa;
+      --blue: #2f78ff;
+      --gold: #f4b724;
+      --coral: #f36c6c;
+      --violet: #6254d9;
+      --aqua-soft: #e9fbf8;
+      --green-soft: #ecf9ef;
+      --blue-soft: #edf4ff;
+      --gold-soft: #fff7df;
+      --coral-soft: #fff0ee;
+      --violet-soft: #f1efff;
+      --shadow: 0 20px 50px rgba(15, 27, 45, 0.14);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(90deg, rgba(32, 163, 66, 0.08) 0 12%, transparent 12% 100%),
+        linear-gradient(180deg, #f7fafb 0%, #eef4f6 100%);
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      line-height: 1.65;
+    }
+
+    img,
+    svg {
+      display: block;
+      max-width: 100%;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .article-shell {
+      width: min(1180px, calc(100% - 34px));
+      margin: 0 auto;
+      padding: 26px 0 50px;
+    }
+
+    .news-card {
+      container: noticia / inline-size;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+      background: var(--navy);
+      color: #eef7f8;
+      padding: 16px clamp(18px, 4vw, 44px);
+    }
+
+    .brand-group,
+    .program-pill {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .logo-box {
+      width: clamp(220px, 26vw, 300px);
+      height: 72px;
+      flex: 0 0 auto;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 8px;
+      background:
+        #ffffff
+        url("https://i.imgur.com/pvfJMPT.jpeg")
+        center / 112% auto
+        no-repeat;
+      box-shadow: 0 10px 24px rgba(3, 9, 18, 0.18);
+    }
+
+    .logo-box img {
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+    }
+
+    .brand-title {
+      display: none;
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .brand-subtitle {
+      margin: 0;
+      line-height: 1.45;
+    }
+
+    .brand-subtitle,
+    .program-pill span {
+      color: #c8d6de;
+      font-size: 14px;
+    }
+
+    .program-pill {
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.06);
+      white-space: nowrap;
+    }
+
+    .hero {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.06fr) minmax(320px, 0.94fr);
+      min-height: 560px;
+      background:
+        linear-gradient(135deg, rgba(24, 184, 170, 0.18), transparent 42%),
+        linear-gradient(100deg, #102238 0%, #0c1726 62%, #103c38 100%);
+      color: #ffffff;
+    }
+
+    .hero::before,
+    .hero::after {
+      content: "";
+      position: absolute;
+      pointer-events: none;
+    }
+
+    .hero::before {
+      right: -70px;
+      top: 44px;
+      width: 220px;
+      height: 220px;
+      border: 28px solid rgba(244, 183, 36, 0.22);
+      transform: rotate(18deg);
+    }
+
+    .hero::after {
+      left: -72px;
+      bottom: -74px;
+      width: 190px;
+      height: 190px;
+      border: 24px solid rgba(47, 120, 255, 0.18);
+      transform: rotate(35deg);
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 1;
+      padding: clamp(32px, 5vw, 62px);
+    }
+
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 20px;
+      border-radius: 999px;
+      background: rgba(32, 163, 66, 0.18);
+      color: #a9f5bd;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      padding: 8px 13px;
+      text-transform: uppercase;
+    }
+
+    .kicker::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--gold);
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.17;
+      margin: 0;
+    }
+
+    h1 {
+      max-width: 820px;
+      font-size: clamp(30px, 4.2vw, 46px);
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 820px;
+      margin: 20px 0 0;
+      color: #dbe9ee;
+      font-size: clamp(17px, 1.9vw, 20px);
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 26px;
+    }
+
+    .badge {
+      border-radius: 999px;
+      color: #ffffff;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 9px 13px;
+    }
+
+    .badge.green {
+      background: rgba(32, 163, 66, 0.24);
+      border: 1px solid rgba(169, 245, 189, 0.28);
+    }
+
+    .badge.blue {
+      background: rgba(47, 120, 255, 0.23);
+      border: 1px solid rgba(150, 188, 255, 0.32);
+    }
+
+    .badge.gold {
+      background: rgba(244, 183, 36, 0.22);
+      border: 1px solid rgba(255, 222, 120, 0.34);
+    }
+
+    .hero-media {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      align-content: center;
+      gap: 18px;
+      padding: clamp(24px, 4vw, 48px);
+    }
+
+    .logo-feature {
+      display: grid;
+      grid-template-columns: 88px minmax(0, 1fr);
+      gap: 18px;
+      align-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 18px;
+    }
+
+    .logo-feature img {
+      width: 88px;
+      height: 88px;
+      border-radius: 8px;
+      object-fit: contain;
+      background: #ffffff;
+      padding: 5px;
+    }
+
+    .logo-feature strong {
+      display: block;
+      font-size: 20px;
+    }
+
+    .logo-feature span {
+      display: block;
+      margin-top: 4px;
+      color: #cfe1e7;
+      font-size: 15px;
+    }
+
+    .logo-feature.adus-feature {
+      grid-template-columns: minmax(138px, 170px) minmax(0, 1fr);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .logo-feature.adus-feature img {
+      width: 100%;
+      height: 88px;
+      padding: 4px;
+    }
+
+    .source-link {
+      display: inline-block;
+      color: inherit;
+      font-weight: 800;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    .section {
+      padding: clamp(30px, 5vw, 58px);
+    }
+
+    .section.alt {
+      background:
+        linear-gradient(90deg, rgba(244, 183, 36, 0.09), transparent 36%),
+        #fbfdfe;
+    }
+
+    .section.blue-band {
+      background:
+        linear-gradient(120deg, rgba(47, 120, 255, 0.12), rgba(24, 184, 170, 0.08)),
+        #f7fbff;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: end;
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--sena);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .section h2 {
+      color: var(--navy);
+      font-size: clamp(26px, 3.4vw, 38px);
+    }
+
+    .section-intro {
+      max-width: 860px;
+      margin: 12px 0 0;
+      color: #344652;
+      font-size: 18px;
+    }
+
+    .institutional-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .strip-item {
+      background: #ffffff;
+      padding: 22px;
+    }
+
+    .strip-item strong {
+      display: block;
+      color: var(--navy);
+      font-size: 22px;
+      line-height: 1.2;
+    }
+
+    .strip-item span {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .story-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 32px;
+    }
+
+    .story p {
+      margin: 0 0 16px;
+      color: #2d3f4b;
+      font-size: 18px;
+    }
+
+    .quote {
+      margin: 24px 0;
+      border-left: 6px solid var(--sena);
+      border-radius: 0 8px 8px 0;
+      background: var(--green-soft);
+      color: #173e24;
+      padding: 20px 22px;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .side-panel {
+      align-self: start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+    .side-panel h3 {
+      background: var(--navy);
+      color: #ffffff;
+      font-size: 20px;
+      padding: 18px 20px;
+    }
+
+    .fact-list {
+      display: grid;
+      gap: 0;
+    }
+
+    .fact {
+      border-top: 1px solid var(--line);
+      padding: 16px 20px;
+    }
+
+    .fact:first-child {
+      border-top: 0;
+    }
+
+    .fact strong {
+      display: block;
+      color: var(--teal);
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+
+    .fact span {
+      display: block;
+      margin-top: 4px;
+      color: #2d3e49;
+    }
+
+    .role-grid,
+    .module-grid,
+    .benefit-grid,
+    .gallery {
+      display: grid;
+      gap: 18px;
+    }
+
+    .role-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .module-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .tech-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 22px;
+    }
+
+    .benefit-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 20px;
+    }
+
+    .card::after {
+      content: "";
+      position: absolute;
+      right: -34px;
+      top: -34px;
+      width: 86px;
+      height: 86px;
+      border: 16px solid rgba(15, 27, 45, 0.05);
+      transform: rotate(22deg);
+    }
+
+    .card.teal {
+      background: var(--aqua-soft);
+      border-color: #b9ece6;
+    }
+
+    .card.green {
+      background: var(--green-soft);
+      border-color: #beecc9;
+    }
+
+    .card.blue {
+      background: var(--blue-soft);
+      border-color: #c9dcff;
+    }
+
+    .card.gold {
+      background: var(--gold-soft);
+      border-color: #f6df95;
+    }
+
+    .card.coral {
+      background: var(--coral-soft);
+      border-color: #f6c7bf;
+    }
+
+    .card.violet {
+      background: var(--violet-soft);
+      border-color: #d5d0ff;
+    }
+
+    .icon {
+      display: inline-grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      margin-bottom: 14px;
+      border-radius: 8px;
+      color: #ffffff;
+    }
+
+    .teal .icon {
+      background: var(--teal);
+    }
+
+    .green .icon {
+      background: var(--sena);
+    }
+
+    .blue .icon {
+      background: var(--blue);
+    }
+
+    .gold .icon {
+      background: var(--gold);
+      color: #2f2605;
+    }
+
+    .coral .icon {
+      background: var(--coral);
+    }
+
+    .violet .icon {
+      background: var(--violet);
+    }
+
+    .icon svg {
+      width: 25px;
+      height: 25px;
+      stroke: currentColor;
+      stroke-width: 2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .card h3 {
+      color: var(--navy);
+      font-size: 21px;
+      margin-bottom: 8px;
+    }
+
+    .card p,
+    .card li {
+      color: #40515c;
+      font-size: 16px;
+    }
+
+    .card ul {
+      display: grid;
+      gap: 7px;
+      margin: 12px 0 0;
+      padding-left: 18px;
+    }
+
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .tag-list span {
+      border-radius: 999px;
+      background: rgba(15, 27, 45, 0.08);
+      color: #263847;
+      font-size: 14px;
+      font-weight: 700;
+      padding: 7px 10px;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 14px;
+      margin-top: 22px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 54px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 16px;
+    }
+
+    .step-number {
+      display: grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 8px;
+      background: var(--navy);
+      color: #ffffff;
+      font-size: 20px;
+      font-weight: 800;
+    }
+
+    .step h3 {
+      color: var(--navy);
+      font-size: 20px;
+    }
+
+    .step p {
+      margin: 6px 0 0;
+      color: #445662;
+      font-size: 16px;
+    }
+
+    .gallery {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .gallery-featured {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .gallery-featured figure {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, rgba(24, 184, 170, 0.1), rgba(47, 120, 255, 0.08)),
+        #ffffff;
+      padding: 14px;
+    }
+
+    .gallery-featured a {
+      display: block;
+      border-radius: 6px;
+      background: #07111d;
+    }
+
+    .gallery-featured img {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+      border-radius: 6px;
+      background: #07111d;
+    }
+
+    .gallery-featured figcaption {
+      margin-top: 10px;
+      font-size: 16px;
+    }
+
+    .gallery-featured strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--navy);
+      font-size: 24px;
+      line-height: 1.2;
+    }
+
+    .team-feature {
+      display: grid;
+      grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1.05fr);
+      gap: 26px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, rgba(32, 163, 66, 0.1), rgba(47, 120, 255, 0.08)),
+        #ffffff;
+      padding: clamp(18px, 3vw, 28px);
+    }
+
+    .team-photo-placeholder {
+      display: grid;
+      place-items: center;
+      min-height: 310px;
+      border: 2px dashed #9fcfba;
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, rgba(24, 184, 170, 0.12), rgba(244, 183, 36, 0.12)),
+        #f8fcfb;
+      color: #245349;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .team-photo-placeholder svg {
+      width: 54px;
+      height: 54px;
+      margin: 0 auto 12px;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .team-photo-placeholder strong {
+      display: block;
+      color: var(--navy);
+      font-size: 20px;
+    }
+
+    .team-photo-placeholder span {
+      display: block;
+      max-width: 360px;
+      margin-top: 8px;
+      color: #557069;
+      font-size: 15px;
+    }
+
+    .team-copy p {
+      margin: 12px 0 0;
+      color: #344652;
+      font-size: 17px;
+    }
+
+    .gallery figure {
+      margin: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 12px;
+    }
+
+    .gallery a {
+      display: block;
+      border-radius: 6px;
+      background: #07111d;
+    }
+
+    .gallery img {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+      object-position: center;
+      border-radius: 6px;
+      background: #07111d;
+    }
+
+    figcaption {
+      margin-top: 10px;
+      color: #4d6170;
+      font-size: 15px;
+    }
+
+    .closing {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 260px;
+      gap: 28px;
+      align-items: center;
+      background: var(--navy);
+      color: #ffffff;
+    }
+
+    .closing p {
+      margin: 12px 0 0;
+      color: #d4e3ea;
+      font-size: 18px;
+    }
+
+    .closing-mark {
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.07);
+      padding: 18px;
+      text-align: center;
+    }
+
+    .closing-mark img {
+      width: 190px;
+      height: 92px;
+      margin: 0 auto 12px;
+      border-radius: 8px;
+      object-fit: contain;
+      background: #ffffff;
+      padding: 6px;
+    }
+
+    footer {
+      border-top: 1px solid var(--line);
+      padding: 22px clamp(18px, 4vw, 44px);
+      color: var(--muted);
+      font-size: 14px;
+      background: #ffffff;
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .story-grid,
+      .closing {
+        grid-template-columns: 1fr;
+      }
+
+      .institutional-strip,
+      .module-grid,
+      .tech-grid,
+      .benefit-grid,
+      .gallery,
+      .gallery-featured {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .role-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .article-shell {
+        width: min(100% - 18px, 1180px);
+        padding: 10px 0 28px;
+      }
+
+      .topbar,
+      .section-head {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .topbar,
+      .section-head,
+      .brand-group {
+        display: grid;
+      }
+
+      .brand-group {
+        grid-template-columns: minmax(190px, 300px) minmax(0, 1fr);
+      }
+
+      .program-pill {
+        white-space: normal;
+      }
+
+      .hero {
+        min-height: auto;
+      }
+
+      .logo-feature {
+        grid-template-columns: 72px minmax(0, 1fr);
+      }
+
+      .logo-feature.adus-feature {
+        grid-template-columns: minmax(120px, 150px) minmax(0, 1fr);
+      }
+
+      .logo-feature img {
+        width: 72px;
+        height: 72px;
+      }
+
+      .logo-feature.adus-feature img {
+        width: 100%;
+        height: 72px;
+      }
+
+      .institutional-strip,
+      .module-grid,
+      .tech-grid,
+      .benefit-grid,
+      .gallery-featured,
+      .team-feature,
+      .gallery {
+        grid-template-columns: 1fr;
+      }
+
+      .step {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @container noticia (max-width: 980px) {
+      .hero,
+      .story-grid,
+      .closing {
+        grid-template-columns: 1fr;
+      }
+
+      .institutional-strip,
+      .module-grid,
+      .tech-grid,
+      .benefit-grid,
+      .gallery,
+      .gallery-featured {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .role-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @container noticia (max-width: 760px) {
+      .topbar {
+        align-items: start;
+      }
+
+      .topbar,
+      .section-head,
+      .brand-group {
+        display: grid;
+      }
+
+      .brand-group {
+        grid-template-columns: minmax(190px, 300px) minmax(0, 1fr);
+      }
+
+      .logo-box {
+        width: clamp(190px, 54vw, 260px);
+        height: 66px;
+        background-position: center;
+        background-size: 116% auto;
+      }
+
+      .topbar,
+      .section-head {
+        grid-template-columns: 1fr;
+      }
+
+      .program-pill {
+        white-space: normal;
+      }
+
+      .hero {
+        min-height: auto;
+      }
+
+      .hero-copy,
+      .hero-media,
+      .section {
+        padding: clamp(24px, 6vw, 38px);
+      }
+
+      h1 {
+        font-size: clamp(28px, 5vw, 38px);
+      }
+
+      .section h2 {
+        font-size: clamp(24px, 4vw, 32px);
+      }
+
+      .lead,
+      .section-intro,
+      .story p,
+      .closing p {
+        font-size: 17px;
+      }
+
+      .logo-feature {
+        grid-template-columns: 72px minmax(0, 1fr);
+      }
+
+      .logo-feature.adus-feature {
+        grid-template-columns: minmax(120px, 150px) minmax(0, 1fr);
+      }
+
+      .logo-feature img {
+        width: 72px;
+        height: 72px;
+      }
+
+      .logo-feature.adus-feature img {
+        width: 100%;
+        height: 72px;
+      }
+
+      .institutional-strip,
+      .module-grid,
+      .tech-grid,
+      .benefit-grid,
+      .gallery-featured,
+      .team-feature,
+      .gallery {
+        grid-template-columns: 1fr;
+      }
+
+      .step {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="article-shell">
+    <article class="news-card">
+      <div class="topbar">
+        <div class="brand-group">
+          <div class="logo-box">
+            <img src="https://i.imgur.com/pvfJMPT.jpeg" alt="Logo de ADUS Hospitality OS">
+          </div>
+          <div>
+            <p class="brand-title">ADUS Hospitality OS</p>
+            <p class="brand-subtitle">Software de gestión hotelera desarrollado como proyecto formativo</p>
+          </div>
+        </div>
+        <div class="program-pill">
+          <span>Técnico en Desarrollo de Software</span>
+        </div>
+      </div>
+
+      <header class="hero">
+        <section class="hero-copy" aria-label="Encabezado de la noticia">
+          <span class="kicker">Noticia institucional</span>
+          <h1>Aprendices presentan una plataforma integral para modernizar la gestión hotelera</h1>
+          <p class="lead">
+            ADUS Hospitality OS centraliza las actividades de administración, recepción, reservas, servicios,
+            facturación y consulta para huéspedes, ofreciendo una visión organizada de la operación diaria de un hotel.
+          </p>
+          <div class="hero-actions" aria-label="Datos principales del proyecto">
+            <span class="badge green">Desarrollo: julio 2025 a junio 2026</span>
+            <span class="badge blue">Programa: Técnico en Desarrollo de Software</span>
+            <span class="badge gold">Enfoque: operación hotelera conectada</span>
+          </div>
+        </section>
+
+        <section class="hero-media" aria-label="Logos y vista principal del software">
+          <div class="logo-feature">
+            <img src="https://img.canal1.com.co/wp-content/uploads/2023/05/08164538/SENA.jpeg?format=auto&width=1200" alt="Logo del SENA">
+            <div>
+              <strong>Proyecto formativo con enfoque productivo</strong>
+              <span>Una propuesta construida por aprendices para aplicar competencias técnicas en un caso de uso real.</span>
+            </div>
+          </div>
+          <div class="logo-feature adus-feature">
+            <img src="https://i.imgur.com/pvfJMPT.jpeg" alt="Logo de ADUS Hospitality OS">
+            <div>
+              <strong>ADUS Hospitality OS</strong>
+              <span>Identidad del software creado para apoyar la gestión hotelera desde una plataforma web.</span>
+            </div>
+          </div>
+        </section>
+      </header>
+
+      <section class="institutional-strip" aria-label="Resumen institucional">
+        <div class="strip-item">
+          <strong>3 perfiles</strong>
+          <span>Administrador, recepcionista y cliente con accesos diferenciados.</span>
+        </div>
+        <div class="strip-item">
+          <strong>8 módulos</strong>
+          <span>Gestión de usuarios, reservas, habitaciones, facturas, servicios y reportes.</span>
+        </div>
+        <div class="strip-item">
+          <strong>1 operación</strong>
+          <span>Información conectada para reducir tareas dispersas y duplicidad de registros.</span>
+        </div>
+        <div class="strip-item">
+          <strong>2025-2026</strong>
+          <span>Proyecto realizado durante el periodo de formación establecido.</span>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Contexto del proyecto</p>
+            <h2>Una respuesta tecnológica para hoteles que necesitan ordenar su operación</h2>
+            <p class="section-intro">
+              El software nace como una solución académica orientada a resolver necesidades frecuentes en hoteles:
+              consultar reservas, registrar entradas y salidas, administrar habitaciones, controlar servicios,
+              revisar facturación y entregar información clara a cada usuario según su rol.
+            </p>
+          </div>
+        </div>
+
+        <div class="story-grid">
+          <div class="story">
+            <p>
+              ADUS Hospitality OS fue desarrollado por aprendices del programa Técnico en Desarrollo de Software,
+              en el marco del proceso formativo comprendido entre julio de 2025 y junio de 2026. El equipo de trabajo
+              enfocó el proyecto en una necesidad concreta: contar con un sistema que reúna en un solo entorno digital
+              las actividades principales de un establecimiento hotelero.
+            </p>
+            <p>
+              La plataforma permite que el administrador tenga control sobre los componentes esenciales del negocio,
+              que el recepcionista ejecute con mayor claridad las tareas del día y que el cliente consulte información
+              relacionada con reservas, servicios, pedidos y cuenta personal. Esta separación por perfiles fortalece
+              el orden, la trazabilidad y la seguridad funcional del sistema.
+            </p>
+            <div class="quote">
+              Más que una interfaz de consulta, ADUS Hospitality OS propone una forma organizada de conectar personas,
+              procesos e información dentro de la operación hotelera.
+            </div>
+            <p>
+              El proyecto integra elementos de análisis de requerimientos, diseño de experiencia de usuario, desarrollo
+              de módulos, construcción de paneles, validación de flujos y presentación de resultados. Por ello, funciona
+              como evidencia del aprendizaje técnico aplicado a un escenario cercano al sector productivo.
+            </p>
+          </div>
+
+          <aside class="side-panel" aria-label="Ficha técnica del proyecto">
+            <h3>Ficha técnica</h3>
+            <div class="fact-list">
+              <div class="fact">
+                <strong>Nombre del software</strong>
+                <span>ADUS Hospitality OS</span>
+              </div>
+              <div class="fact">
+                <strong>Equipo de trabajo</strong>
+                <span>Aprendices del programa Técnico en Desarrollo de Software</span>
+              </div>
+              <div class="fact">
+                <strong>Periodo de desarrollo</strong>
+                <span>Julio de 2025 a junio de 2026</span>
+              </div>
+              <div class="fact">
+                <strong>Tipo de solución</strong>
+                <span>Aplicación web para gestión hotelera</span>
+              </div>
+              <div class="fact">
+                <strong>Usuarios objetivo</strong>
+                <span>Personal administrativo, recepción y huéspedes/clientes</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section alt">
+        <div class="team-feature" aria-label="Equipo de desarrollo del producto">
+          <div class="team-photo-placeholder">
+            <div>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 19a5 5 0 0 1 10 0"/>
+                <circle cx="9" cy="8" r="4"/>
+                <path d="M17 11a3 3 0 1 0-1.7-5.5"/>
+                <path d="M20 19a4 4 0 0 0-4-4"/>
+                <path d="M3 21h18"/>
+              </svg>
+              <strong>Equipo de desarrollo del producto</strong>
+              <span>Imagen institucional del grupo de aprendices que participó en la construcción de ADUS Hospitality OS.</span>
+            </div>
+          </div>
+          <div class="team-copy">
+            <p class="eyebrow">Equipo de trabajo</p>
+            <h2>Aprendices que hicieron posible ADUS Hospitality OS</h2>
+            <p>
+              El desarrollo de ADUS Hospitality OS fue realizado por aprendices del programa Técnico en Desarrollo de
+              Software, quienes asumieron actividades de análisis, diseño, construcción, validación y presentación del
+              sistema como parte de su proceso formativo.
+            </p>
+            <p>
+              Su participación permitió consolidar una propuesta tecnológica orientada a la operación hotelera,
+              fortaleciendo competencias en arquitectura web, experiencia de usuario, lógica de negocio, integración
+              de módulos y documentación técnica durante el periodo comprendido entre julio de 2025 y junio de 2026.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section alt">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Funcionamiento por perfiles</p>
+            <h2>Paneles diseñados para las responsabilidades de cada usuario</h2>
+            <p class="section-intro">
+              El sistema organiza la experiencia mediante roles. Cada perfil encuentra accesos y acciones relacionadas
+              con sus tareas, evitando que todos los usuarios vean la misma información o dependan de menús extensos.
+            </p>
+          </div>
+        </div>
+
+        <div class="role-grid">
+          <section class="card green">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3h7v18H5V3h7Z"/><path d="M9 7h6M9 11h6M9 15h2"/></svg>
+            </span>
+            <h3>Administrador</h3>
+            <p>
+              Cuenta con el panel de mayor alcance. Desde allí puede gestionar usuarios, reservas, habitaciones,
+              tipos de habitación, amenidades, servicios, facturas, reportes, supervisión de áreas y reinicio de
+              estadísticas operativas cuando el flujo lo requiera.
+            </p>
+          </section>
+
+          <section class="card gold">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4Z"/><path d="M8 9h8M8 13h4"/><path d="M18 17l2 2"/></svg>
+            </span>
+            <h3>Recepcionista</h3>
+            <p>
+              Dispone de herramientas para el trabajo diario de recepción: caja y folios, check-in, check-out,
+              registro de incidencias, revisión de pendientes, control de salidas y estado operativo de la jornada.
+            </p>
+          </section>
+
+          <section class="card teal">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+            </span>
+            <h3>Cliente o huésped</h3>
+            <p>
+              Accede a un entorno simple para consultar su información personal, revisar facturas, solicitar servicios,
+              ver pedidos, crear o gestionar reservas y conocer el estado de su cuenta dentro del hotel.
+            </p>
+          </section>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Funcionalidades del sistema</p>
+            <h2>Módulos que conectan administración, operación y atención al huésped</h2>
+            <p class="section-intro">
+              ADUS Hospitality OS reúne las funciones necesarias para acompañar el ciclo completo de una estadía:
+              desde la configuración del hotel hasta la solicitud de servicios y el cierre de información operativa.
+            </p>
+          </div>
+        </div>
+
+        <div class="module-grid">
+          <section class="card blue">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M7 3v3M17 3v3M4 8h16M5 5h14v16H5Z"/><path d="m9 14 2 2 4-5"/></svg>
+            </span>
+            <h3>Reservas</h3>
+            <p>Consulta, registro y seguimiento de reservas para organizar disponibilidad y ocupación.</p>
+          </section>
+
+          <section class="card teal">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3 11h18v8H3Z"/><path d="M7 11V7h10v4"/><path d="M7 19v2M17 19v2"/></svg>
+            </span>
+            <h3>Habitaciones</h3>
+            <p>Administración de habitaciones, tipos, características y elementos asociados a la estadía.</p>
+          </section>
+
+          <section class="card green">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-8 0v2"/><circle cx="12" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+            </span>
+            <h3>Usuarios</h3>
+            <p>Gestión de cuentas y perfiles para separar permisos de administrador, recepcionista y cliente.</p>
+          </section>
+
+          <section class="card gold">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2Z"/><path d="M9 7h6M9 11h6M9 15h4"/></svg>
+            </span>
+            <h3>Facturación</h3>
+            <p>Consulta y organización de facturas para apoyar el cierre de consumos y cobros.</p>
+          </section>
+
+          <section class="card violet">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 17h16"/><path d="M6 17v-5a6 6 0 0 1 12 0v5"/><path d="M12 5V3"/><path d="M3 21h18"/></svg>
+            </span>
+            <h3>Servicios</h3>
+            <p>Catálogo para solicitudes como alimentos, spa u otros servicios complementarios del hotel.</p>
+          </section>
+
+          <section class="card coral">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="m12 3 3 6 6 1-4.5 4.4 1 6.3-5.5-3-5.5 3 1-6.3L3 10l6-1Z"/></svg>
+            </span>
+            <h3>Amenidades</h3>
+            <p>Registro y control de elementos que enriquecen la experiencia de alojamiento.</p>
+          </section>
+
+          <section class="card blue">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 19V5"/><path d="M8 19v-8"/><path d="M12 19V8"/><path d="M16 19v-5"/><path d="M20 19V3"/></svg>
+            </span>
+            <h3>Reportes</h3>
+            <p>Información resumida para analizar actividad, operación y comportamiento del sistema.</p>
+          </section>
+
+          <section class="card teal">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+            </span>
+            <h3>Control operativo</h3>
+            <p>Seguimiento de incidencias, caja, folios, estados y tareas pendientes de recepción.</p>
+          </section>
+        </div>
+      </section>
+
+      <section class="section alt">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Base técnica del desarrollo</p>
+            <h2>Una arquitectura web organizada en frontend y backend</h2>
+            <p class="section-intro">
+              De acuerdo con la documentación técnica del proyecto, ADUS Hospitality OS está construido como una
+              aplicación web SPA conectada a una API REST. Esta separación permite que la interfaz por roles consuma
+              servicios del backend de forma ordenada y que cada módulo mantenga responsabilidades claras.
+            </p>
+          </div>
+        </div>
+
+        <div class="tech-grid">
+          <section class="card blue">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4Z"/><path d="M8 9h8M8 13h8M8 17h4"/></svg>
+            </span>
+            <h3>Frontend SPA</h3>
+            <p>
+              La interfaz está desarrollada con Nuxt 3, Vue 3, TypeScript, Vuetify 3, Tailwind CSS, Pinia y Vite.
+              Su configuración funciona como SPA, con rutas por páginas, layouts por rol, estado global y llamadas
+              HTTP centralizadas mediante composables.
+            </p>
+            <div class="tag-list" aria-label="Tecnologías del frontend">
+              <span>Nuxt 3</span>
+              <span>Vue 3</span>
+              <span>TypeScript</span>
+              <span>Vuetify</span>
+              <span>Tailwind CSS</span>
+              <span>Pinia</span>
+            </div>
+          </section>
+
+          <section class="card green">
+            <span class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 7c0-2 16-2 16 0v10c0 2-16 2-16 0Z"/><path d="M4 7c0 2 16 2 16 0"/><path d="M4 12c0 2 16 2 16 0"/></svg>
+            </span>
+            <h3>Backend API REST</h3>
+            <p>
+              El backend está construido con NestJS 11, TypeScript, TypeORM y MySQL. Expone servicios para
+              autenticación, usuarios, hoteles, reservas, check-in/check-out, folios, pagos, caja, facturación,
+              servicios, reportes, incidencias y administración de plataforma.
+            </p>
+            <div class="tag-list" aria-label="Tecnologías del backend">
+              <span>NestJS</span>
+              <span>TypeORM</span>
+              <span>MySQL</span>
+              <span>JWT</span>
+              <span>Google OAuth</span>
+              <span>Swagger</span>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="section blue-band">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Flujo de trabajo</p>
+            <h2>De la reserva al cierre de la estadía</h2>
+            <p class="section-intro">
+              El sistema acompaña diferentes momentos de la operación, permitiendo que la información avance entre
+              áreas sin depender de registros aislados.
+            </p>
+          </div>
+        </div>
+
+        <div class="timeline">
+          <div class="step">
+            <span class="step-number">1</span>
+            <div>
+              <h3>Configuración y administración</h3>
+              <p>El administrador prepara usuarios, habitaciones, tipos de habitación, amenidades y servicios disponibles.</p>
+            </div>
+          </div>
+          <div class="step">
+            <span class="step-number">2</span>
+            <div>
+              <h3>Reserva y llegada</h3>
+              <p>La recepción revisa pendientes, valida información y registra el check-in del huésped.</p>
+            </div>
+          </div>
+          <div class="step">
+            <span class="step-number">3</span>
+            <div>
+              <h3>Consumo de servicios</h3>
+              <p>El cliente puede consultar accesos, solicitar servicios, revisar pedidos y hacer seguimiento a su cuenta.</p>
+            </div>
+          </div>
+          <div class="step">
+            <span class="step-number">4</span>
+            <div>
+              <h3>Salida y análisis</h3>
+              <p>El recepcionista gestiona check-out, caja y folios, mientras el administrador puede consultar reportes.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Valor para el lector</p>
+            <h2>Por qué ADUS Hospitality OS resulta relevante</h2>
+            <p class="section-intro">
+              La propuesta combina orden operativo, acceso por roles y una interfaz visual pensada para que las tareas
+              frecuentes sean más claras. Esto convierte al proyecto en una base atractiva para continuar evolucionando
+              hacia una solución de mayor alcance.
+            </p>
+          </div>
+        </div>
+
+        <div class="benefit-grid">
+          <section class="card green">
+            <h3>Organización de procesos</h3>
+            <p>Centraliza información clave del hotel y reduce la dispersión entre módulos, perfiles y tareas diarias.</p>
+          </section>
+          <section class="card gold">
+            <h3>Mejor experiencia de atención</h3>
+            <p>Facilita que recepción identifique pendientes, registre movimientos y atienda solicitudes con mayor contexto.</p>
+          </section>
+          <section class="card violet">
+            <h3>Escalabilidad formativa</h3>
+            <p>El proyecto deja una base para incorporar nuevas funciones como notificaciones, analítica avanzada o integración de pagos.</p>
+          </section>
+        </div>
+      </section>
+
+      <section class="section alt">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Galería del proyecto</p>
+            <h2>Vistas principales del software</h2>
+            <p class="section-intro">
+              Las capturas evidencian la navegación por roles, el diseño de paneles y la distribución de funcionalidades
+              construidas para ADUS Hospitality OS.
+            </p>
+          </div>
+        </div>
+
+        <div class="gallery-featured" aria-label="Acceso y registro de usuarios">
+          <figure>
+            <a href="https://imgur.com/a/hjkdlew" target="_blank" rel="noopener">
+              <img src="https://i.imgur.com/NEDcnL2.png" alt="Inicio de sesión de ADUS Hospitality OS">
+            </a>
+            <figcaption>
+              <strong>Inicio de sesión</strong>
+              Puerta de entrada a ADUS Hospitality OS, con identidad visual del software y acceso para los usuarios
+              registrados en la plataforma.
+              <a class="source-link" href="https://imgur.com/a/hjkdlew" target="_blank" rel="noopener">Ver imagen en Imgur</a>
+            </figcaption>
+          </figure>
+
+          <figure>
+            <a href="https://imgur.com/a/3Bm1C36" target="_blank" rel="noopener">
+              <img src="https://i.imgur.com/n5P6v1T.png" alt="Registro de usuario en ADUS Hospitality OS">
+            </a>
+            <figcaption>
+              <strong>Registro de usuario</strong>
+              Formulario de creación de cuenta para incorporar nuevos usuarios al sistema y habilitar su acceso a la
+              plataforma según el flujo definido.
+              <a class="source-link" href="https://imgur.com/a/3Bm1C36" target="_blank" rel="noopener">Ver imagen en Imgur</a>
+            </figcaption>
+          </figure>
+        </div>
+
+        <div class="gallery" aria-label="Capturas del software por rol">
+          <figure>
+            <a href="https://imgur.com/a/WRtTyQt" target="_blank" rel="noopener">
+              <img src="https://i.imgur.com/lT9GWGz.png" alt="Panel administrador de ADUS Hospitality OS">
+            </a>
+            <figcaption>
+              Panel administrador: vista de módulos para usuarios, reservas, habitaciones, amenidades, servicios y reportes.
+              <a class="source-link" href="https://imgur.com/a/WRtTyQt" target="_blank" rel="noopener">Ver imagen en Imgur</a>
+            </figcaption>
+          </figure>
+
+          <figure>
+            <a href="https://imgur.com/a/yStQobZ" target="_blank" rel="noopener">
+              <img src="https://i.imgur.com/JRnzRmN.png" alt="Panel recepcionista de ADUS Hospitality OS">
+            </a>
+            <figcaption>
+              Panel recepcionista: seguimiento de pendientes, check-in, check-out, caja, folios e incidencias.
+              <a class="source-link" href="https://imgur.com/a/yStQobZ" target="_blank" rel="noopener">Ver imagen en Imgur</a>
+            </figcaption>
+          </figure>
+
+          <figure>
+            <a href="https://imgur.com/a/5urgMX7" target="_blank" rel="noopener">
+              <img src="https://i.imgur.com/XaaRqil.png" alt="Panel cliente de ADUS Hospitality OS">
+            </a>
+            <figcaption>
+              Panel cliente: accesos a perfil, facturas, servicios, pedidos, cuenta y reservas personales.
+              <a class="source-link" href="https://imgur.com/a/5urgMX7" target="_blank" rel="noopener">Ver imagen en Imgur</a>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section closing">
+        <div>
+          <p class="eyebrow">Proyección</p>
+          <h2>Un proyecto con potencial para seguir creciendo</h2>
+          <p>
+            ADUS Hospitality OS demuestra cómo la formación técnica puede convertirse en una solución concreta para
+            mejorar procesos institucionales y productivos. Su enfoque modular permite ampliar funcionalidades,
+            fortalecer la experiencia de usuario y preparar nuevas versiones orientadas a escenarios reales de operación.
+          </p>
+        </div>
+        <div class="closing-mark">
+          <img src="https://i.imgur.com/pvfJMPT.jpeg" alt="Logo de ADUS Hospitality OS">
+          <strong>ADUS Hospitality OS</strong>
+        </div>
+      </section>
+
+      <footer>
+        Noticia institucional sobre el proyecto ADUS Hospitality OS, desarrollado por aprendices del programa Técnico
+        en Desarrollo de Software durante el periodo julio de 2025 a junio de 2026.
+      </footer>
+    </article>
+  </main>
+</body>
+</html>
